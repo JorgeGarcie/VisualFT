@@ -1,0 +1,37 @@
+# ROS 2 workspace build artifacts
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# ROS bag files
+*.db3
+*.mcap
+*.bag
+*.bag.active
+ros2_ws/*.db3
+ros2_ws/*.mcap
+ros2_ws/bag*/ 
+
+# Camera / experiment data
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.tiff
+
+# Temporary / cache
+*.swp
+*.swo
+*.tmp
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
