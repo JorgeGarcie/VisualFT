@@ -1,4 +1,4 @@
-## Launch file for VisionFT
+## Launch file for VisionFT nodes
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
