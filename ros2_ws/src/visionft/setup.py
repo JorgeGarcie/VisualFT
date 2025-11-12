@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'visualft_camera'
+package_name = 'visionft'
 
 setup(
     name=package_name,
@@ -10,7 +10,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', ['launch/camera.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/visionft.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -21,6 +21,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            #'flexiv_publisher = visionft.flexiv:main', # NOT USED 
+            'wrench_plotter = visionft.wrench_plotter:main', 
+            'plot_csv = visionft.plot_csv:main', # USED FOR PLOTTING CSV
+            'flexiv_wrench_publisher = visionft.robot_publisher:main',
+            'visualft_coinft = visionft.coinft:main',
         ],
     },
 )
