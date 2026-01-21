@@ -38,7 +38,7 @@ def generate_launch_description():
             name='visualft_coinft',
             output='screen',
             parameters=[{
-                'com_port': '/dev/ttyACM0',
+                'com_port': '/dev/ttyACM2',
                 'baud_rate': 1000000,
                 'frame_id': 'coinft_sensor',
                 'data_dir': '/home/li2053/Teo/VisionFT Files/data',

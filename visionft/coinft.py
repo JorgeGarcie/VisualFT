@@ -16,7 +16,7 @@ class CoinFTPublisher(Node):
         super().__init__('coinft_wrench_publisher')
         
         # Declare parameters
-        self.declare_parameter('com_port', '/dev/ttyACM0')
+        self.declare_parameter('com_port', '/dev/ttyACM1')
         self.declare_parameter('baud_rate', 1000000)
         self.declare_parameter('frame_id', 'coinft_sensor')
         self.declare_parameter('data_dir', '/home/li2053/Teo/VisionFT Files/data')

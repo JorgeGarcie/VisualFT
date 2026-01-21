@@ -11,7 +11,8 @@ __author__ = "Flexiv"
 import time
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, PoseStamped
+from scipy.spatial.transform import Rotation as R
 import spdlog
 import flexivrdk
 
@@ -31,6 +32,7 @@ class FlexivWrenchPublisher(Node):
         
         # Create publisher
         self.wrench_pub = self.create_publisher(WrenchStamped, '/flexiv/wrench', 10)
+        self.tcp_pose_pub = self.create_publisher(PoseStamped, '/flexiv/tcp_pose', 10)
         
         # Setup logger
         self.logger = spdlog.ConsoleLogger("FlexivPublisher")
@@ -44,6 +46,7 @@ class FlexivWrenchPublisher(Node):
         self.timer = self.create_timer(timer_period, self.publish_wrench)
         
         self.get_logger().info(f"Publishing wrench data to /flexiv/wrench at {publish_rate} Hz")
+        self.get_logger().info(f"Publishing TCP pose data to /flexiv/tcp_pose at {publish_rate} Hz")
     
     def initialize_robot(self, robot_sn):
         """Initialize connection to Flexiv robot."""
@@ -77,7 +80,10 @@ class FlexivWrenchPublisher(Node):
         """Read robot F/T data and publish as WrenchStamped."""
         try:
             # Get external wrench in TCP frame [fx, fy, fz, tx, ty, tz]
+            # Get the TCP. Conver Euler angles to quaternion 
             ext_wrench = self.robot.states().ext_wrench_in_tcp
+            tcp_pose = self.robot.states().tcp_pose
+            quaternion = R.from_euler('xyz', tcp_pose[3:6]).as_quat()
             
             # Create and publish WrenchStamped message
             wrench_msg = WrenchStamped()
@@ -90,8 +96,22 @@ class FlexivWrenchPublisher(Node):
             wrench_msg.wrench.torque.x = float(ext_wrench[3])
             wrench_msg.wrench.torque.y = float(ext_wrench[4])
             wrench_msg.wrench.torque.z = float(ext_wrench[5])
+
+            # Create and publish PoseStamped message
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = self.frame_id
+
+            pose_msg.pose.position.x = float(tcp_pose[0])
+            pose_msg.pose.position.y = float(tcp_pose[1])
+            pose_msg.pose.position.z = float(tcp_pose[2])
+            pose_msg.pose.orientation.x = float(quaternion[0])
+            pose_msg.pose.orientation.y = float(quaternion[1])
+            pose_msg.pose.orientation.z = float(quaternion[2])
+            pose_msg.pose.orientation.w = float(quaternion[3])
             
             self.wrench_pub.publish(wrench_msg)
+            self.tcp_pose_pub.publish(pose_msg)
             
         except Exception as e:
             self.get_logger().error(f"Error publishing wrench data: {str(e)}")

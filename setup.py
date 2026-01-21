@@ -26,6 +26,7 @@ setup(
             'plot_csv = visionft.plot_csv:main', # USED FOR PLOTTING CSV
             'flexiv_wrench_publisher = visionft.robot_publisher:main',
             'visualft_coinft = visionft.coinft:main',
+            'data_logger = visionft.data_logger:main',
         ],
     },
 )

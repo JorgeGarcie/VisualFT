@@ -2,13 +2,13 @@
 
 """wrench_plotter.py
 
-Subscribes to CoinFT, Flexiv, and Force Torque wrench topics and plots them for real-time comparison.
+Subscribes to CoinFT and Flexiv wrench topics and TCP pose, plotting TCP X and Y positions.
 Saves all data to CSV file in real-time.
 """
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import WrenchStamped
+from geometry_msgs.msg import WrenchStamped, PoseStamped
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -48,14 +48,15 @@ class WrenchPlotter(Node):
         self.flexiv_ty = deque()
         self.flexiv_tz = deque()
         
-        # Force Torque data
-        self.ft_time = deque()
-        self.ft_fx = deque()
-        self.ft_fy = deque()
-        self.ft_fz = deque()
-        self.ft_tx = deque()
-        self.ft_ty = deque()
-        self.ft_tz = deque()
+        # TCP Position 
+        self.tcp_time = deque()
+        self.tcp_x = deque()
+        self.tcp_y = deque()
+        self.tcp_z = deque()
+        self.tcp_qx = deque()
+        self.tcp_qy = deque()
+        self.tcp_qz = deque()
+        self.tcp_qw = deque()
         
         # Initialize start time as None - will be set on first message
         self.start_time = None
@@ -63,7 +64,7 @@ class WrenchPlotter(Node):
         
         # Setup CSV file for real-time writing
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.csv_filename = f"wrench_data_{timestamp}.csv"
+        self.csv_filename = f"wrench_and_position_data_{timestamp}.csv"
         self.csv_file = open(self.csv_filename, 'w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         
@@ -85,16 +86,16 @@ class WrenchPlotter(Node):
             self.flexiv_callback,
             10
         )
-        
-        self.ft_sub = self.create_subscription(
-            WrenchStamped,
-            '/force_torque_data',
-            self.ft_callback,
+
+        self.tcp_sub = self.create_subscription(
+            PoseStamped,
+            '/flexiv/tcp_pose',
+            self.tcp_callback,
             10
         )
         
         self.get_logger().info("Wrench Plotter started")
-        self.get_logger().info("Subscribing to /coinft/wrench, /flexiv/wrench, and /force_torque_data")
+        self.get_logger().info("Subscribing to /coinft/wrench, /flexiv/wrench, and /flexiv/tcp_pose")
         self.get_logger().info(f"Writing data in real-time to: {self.csv_filename}")
         
         # Setup plot
@@ -157,9 +158,9 @@ class WrenchPlotter(Node):
             # Write to CSV immediately
             self.csv_writer.writerow([current_time, 'flexiv', fx, fy, fz, tx, ty, tz])
             self.csv_file.flush()  # Force write to disk
-    
-    def ft_callback(self, msg):
-        """Callback for Force Torque wrench data."""
+
+    def tcp_callback(self, msg):
+        """Callback for TCP Pose data."""
         with self.lock:
             # Initialize start time on first message
             if self.start_time is None:
@@ -168,58 +169,67 @@ class WrenchPlotter(Node):
             current_time = self.get_clock().now().nanoseconds / 1e9 - self.start_time
             
             # Store data
-            fx = msg.wrench.force.x
-            fy = msg.wrench.force.y
-            fz = msg.wrench.force.z
-            tx = msg.wrench.torque.x
-            ty = msg.wrench.torque.y
-            tz = msg.wrench.torque.z
+            x = msg.pose.position.x
+            y = msg.pose.position.y
+            z = msg.pose.position.z
+            qx = msg.pose.orientation.x
+            qy = msg.pose.orientation.y
+            qz = msg.pose.orientation.z
+            qw = msg.pose.orientation.w
             
-            self.ft_time.append(current_time)
-            self.ft_fx.append(-fx)
-            self.ft_fy.append(fy)
-            self.ft_fz.append(fz)
-            self.ft_tx.append(tx)
-            self.ft_ty.append(ty)
-            self.ft_tz.append(tz)
-            
-            # Write to CSV immediately
-            self.csv_writer.writerow([current_time, 'force_torque', fx, fy, fz, tx, ty, tz])
+            self.tcp_time.append(current_time)
+            self.tcp_x.append(x)
+            self.tcp_y.append(y)
+            self.tcp_z.append(z)
+            self.tcp_qx.append(qx)
+            self.tcp_qy.append(qy)
+            self.tcp_qz.append(qz)
+            self.tcp_qw.append(qw)
+
+            #Write to CSV immediately
+            self.csv_writer.writerow([current_time, 'tcp_pose', x, y, z, qx, qy, qz, qw])
             self.csv_file.flush()  # Force write to disk
     
     def setup_plot(self):
-        """Setup matplotlib figure with single plot."""
-        self.fig, self.ax = plt.subplots(figsize=(14, 7))
-        self.ax.set_title('Force/Torque: CoinFT vs Flexiv vs Force Torque Sensor')
-        self.ax.set_xlabel('Time (s)')
-        self.ax.set_ylabel('Value')
-        self.ax.grid(True, alpha=0.3)
+        """Setup matplotlib figure with two subplots."""
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(14, 10))
+        
+        # Top plot: Force/Torque data
+        self.ax1.set_title('Force/Torque: CoinFT vs Flexiv')
+        self.ax1.set_xlabel('Time (s)')
+        self.ax1.set_ylabel('Value')
+        self.ax1.grid(True, alpha=0.3)
         
         # CoinFT lines (solid)
-        self.line_coinft_fx, = self.ax.plot([], [], '-', color='#1f77b4', label='CoinFT Fx', linewidth=1.5)
-        self.line_coinft_fy, = self.ax.plot([], [], '-', color='#ff7f0e', label='CoinFT Fy', linewidth=1.5)
-        self.line_coinft_fz, = self.ax.plot([], [], '-', color='#2ca02c', label='CoinFT Fz', linewidth=1.5)
-        self.line_coinft_tx, = self.ax.plot([], [], '-', color='#d62728', label='CoinFT Tx', linewidth=1.5)
-        self.line_coinft_ty, = self.ax.plot([], [], '-', color='#9467bd', label='CoinFT Ty', linewidth=1.5)
-        self.line_coinft_tz, = self.ax.plot([], [], '-', color='#8c564b', label='CoinFT Tz', linewidth=1.5)
+        self.line_coinft_fx, = self.ax1.plot([], [], '-', color='#1f77b4', label='CoinFT Fx', linewidth=1.5)
+        self.line_coinft_fy, = self.ax1.plot([], [], '-', color='#ff7f0e', label='CoinFT Fy', linewidth=1.5)
+        self.line_coinft_fz, = self.ax1.plot([], [], '-', color='#2ca02c', label='CoinFT Fz', linewidth=1.5)
+        self.line_coinft_tx, = self.ax1.plot([], [], '-', color='#d62728', label='CoinFT Tx', linewidth=1.5)
+        self.line_coinft_ty, = self.ax1.plot([], [], '-', color='#9467bd', label='CoinFT Ty', linewidth=1.5)
+        self.line_coinft_tz, = self.ax1.plot([], [], '-', color='#8c564b', label='CoinFT Tz', linewidth=1.5)
         
         # Flexiv lines (dashed)
-        self.line_flexiv_fx, = self.ax.plot([], [], '--', color='#1f77b4', label='Flexiv Fx', linewidth=1.5)
-        self.line_flexiv_fy, = self.ax.plot([], [], '--', color='#ff7f0e', label='Flexiv Fy', linewidth=1.5)
-        self.line_flexiv_fz, = self.ax.plot([], [], '--', color='#2ca02c', label='Flexiv Fz', linewidth=1.5)
-        self.line_flexiv_tx, = self.ax.plot([], [], '--', color='#d62728', label='Flexiv Tx', linewidth=1.5)
-        self.line_flexiv_ty, = self.ax.plot([], [], '--', color='#9467bd', label='Flexiv Ty', linewidth=1.5)
-        self.line_flexiv_tz, = self.ax.plot([], [], '--', color='#8c564b', label='Flexiv Tz', linewidth=1.5)
+        self.line_flexiv_fx, = self.ax1.plot([], [], '--', color='#1f77b4', label='Flexiv Fx', linewidth=1.5)
+        self.line_flexiv_fy, = self.ax1.plot([], [], '--', color='#ff7f0e', label='Flexiv Fy', linewidth=1.5)
+        self.line_flexiv_fz, = self.ax1.plot([], [], '--', color='#2ca02c', label='Flexiv Fz', linewidth=1.5)
+        self.line_flexiv_tx, = self.ax1.plot([], [], '--', color='#d62728', label='Flexiv Tx', linewidth=1.5)
+        self.line_flexiv_ty, = self.ax1.plot([], [], '--', color='#9467bd', label='Flexiv Ty', linewidth=1.5)
+        self.line_flexiv_tz, = self.ax1.plot([], [], '--', color='#8c564b', label='Flexiv Tz', linewidth=1.5)
         
-        # Force Torque lines (dotted)
-        self.line_ft_fx, = self.ax.plot([], [], ':', color='#1f77b4', label='FT Fx', linewidth=2)
-        self.line_ft_fy, = self.ax.plot([], [], ':', color='#ff7f0e', label='FT Fy', linewidth=2)
-        self.line_ft_fz, = self.ax.plot([], [], ':', color='#2ca02c', label='FT Fz', linewidth=2)
-        self.line_ft_tx, = self.ax.plot([], [], ':', color='#d62728', label='FT Tx', linewidth=2)
-        self.line_ft_ty, = self.ax.plot([], [], ':', color='#9467bd', label='FT Ty', linewidth=2)
-        self.line_ft_tz, = self.ax.plot([], [], ':', color='#8c564b', label='FT Tz', linewidth=2)
+        self.ax1.legend(loc='upper right', ncol=2, fontsize=8)
         
-        self.ax.legend(loc='upper right', ncol=3, fontsize=7)
+        # Bottom plot: TCP X and Y positions
+        self.ax2.set_title('TCP Position: X and Y')
+        self.ax2.set_xlabel('Time (s)')
+        self.ax2.set_ylabel('Position (m)')
+        self.ax2.grid(True, alpha=0.3)
+        
+        # TCP position lines
+        self.line_tcp_x, = self.ax2.plot([], [], '-', color='#1f77b4', label='TCP X', linewidth=2)
+        self.line_tcp_y, = self.ax2.plot([], [], '-', color='#ff7f0e', label='TCP Y', linewidth=2)
+        
+        self.ax2.legend(loc='upper right', fontsize=10)
+        
         plt.tight_layout()
         
         # Animation
@@ -235,7 +245,7 @@ class WrenchPlotter(Node):
             max_time = max(
                 max(self.coinft_time) if len(self.coinft_time) > 0 else 0,
                 max(self.flexiv_time) if len(self.flexiv_time) > 0 else 0,
-                max(self.ft_time) if len(self.ft_time) > 0 else 0
+                max(self.tcp_time) if len(self.tcp_time) > 0 else 0
             )
             
             min_time = max(0, max_time - window_duration)
@@ -268,33 +278,31 @@ class WrenchPlotter(Node):
                 self.line_flexiv_ty.set_data(filtered_times, [v for v, m in zip(self.flexiv_ty, flexiv_mask) if m])
                 self.line_flexiv_tz.set_data(filtered_times, [v for v, m in zip(self.flexiv_tz, flexiv_mask) if m])
             
-            # Update Force Torque lines (filter to window)
-            if len(self.ft_time) > 0:
-                ft_times = list(self.ft_time)
-                ft_mask = [t >= min_time for t in ft_times]
+            # Update TCP lines (filter to window)
+            if len(self.tcp_time) > 0:
+                tcp_times = list(self.tcp_time)
+                tcp_mask = [t >= min_time for t in tcp_times]
                 
-                filtered_times = [t for t, m in zip(ft_times, ft_mask) if m]
+                filtered_times = [t for t, m in zip(tcp_times, tcp_mask) if m]
                 
-                self.line_ft_fx.set_data(filtered_times, [v for v, m in zip(self.ft_fx, ft_mask) if m])
-                self.line_ft_fy.set_data(filtered_times, [v for v, m in zip(self.ft_fy, ft_mask) if m])
-                self.line_ft_fz.set_data(filtered_times, [v for v, m in zip(self.ft_fz, ft_mask) if m])
-                self.line_ft_tx.set_data(filtered_times, [v for v, m in zip(self.ft_tx, ft_mask) if m])
-                self.line_ft_ty.set_data(filtered_times, [v for v, m in zip(self.ft_ty, ft_mask) if m])
-                self.line_ft_tz.set_data(filtered_times, [v for v, m in zip(self.ft_tz, ft_mask) if m])
+                self.line_tcp_x.set_data(filtered_times, [v for v, m in zip(self.tcp_x, tcp_mask) if m])
+                self.line_tcp_y.set_data(filtered_times, [v for v, m in zip(self.tcp_y, tcp_mask) if m])
             
-            # Set fixed x-axis limits for sliding window
-            self.ax.set_xlim(min_time, max_time)
+            # Set fixed x-axis limits for sliding window on both subplots
+            self.ax1.set_xlim(min_time, max_time)
+            self.ax2.set_xlim(min_time, max_time)
             
-            # Auto-scale y-axis only
-            self.ax.relim()
-            self.ax.autoscale_view(scalex=False, scaley=True)
+            # Auto-scale y-axis only for both subplots
+            self.ax1.relim()
+            self.ax1.autoscale_view(scalex=False, scaley=True)
+            self.ax2.relim()
+            self.ax2.autoscale_view(scalex=False, scaley=True)
         
         return (self.line_coinft_fx, self.line_coinft_fy, self.line_coinft_fz,
                 self.line_coinft_tx, self.line_coinft_ty, self.line_coinft_tz,
                 self.line_flexiv_fx, self.line_flexiv_fy, self.line_flexiv_fz,
                 self.line_flexiv_tx, self.line_flexiv_ty, self.line_flexiv_tz,
-                self.line_ft_fx, self.line_ft_fy, self.line_ft_fz,
-                self.line_ft_tx, self.line_ft_ty, self.line_ft_tz)
+                self.line_tcp_x, self.line_tcp_y)
     
     def close_csv(self):
         """Close the CSV file."""
@@ -304,7 +312,7 @@ class WrenchPlotter(Node):
             print(f"\n✓ Data saved to {self.csv_filename}")
             print(f"  - CoinFT points: {len(self.coinft_time)}")
             print(f"  - Flexiv points: {len(self.flexiv_time)}")
-            print(f"  - Force Torque points: {len(self.ft_time)}")
+            print(f"  - TCP points: {len(self.tcp_time)}")
 
 
 def main(args=None):
