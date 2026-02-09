@@ -16,12 +16,12 @@ class CoinFTPublisher(Node):
         super().__init__('coinft_wrench_publisher')
         
         # Declare parameters
-        self.declare_parameter('com_port', '/dev/ttyACM1')
+        self.declare_parameter('com_port', '/dev/ttyACM0')
         self.declare_parameter('baud_rate', 1000000)
         self.declare_parameter('frame_id', 'coinft_sensor')
         self.declare_parameter('data_dir', '/home/li2053/Teo/VisionFT Files/data')
-        self.declare_parameter('model_file', 'PFT1-1_MLP_5L_norm_L2.onnx')
-        self.declare_parameter('norm_file', 'PFT1-1_norm_constants.mat')
+        self.declare_parameter('model_file', 'PFT5-1_MLP_5L_norm_L2.onnx')
+        self.declare_parameter('norm_file', 'PFT5-1_norm_constants.mat')
         
         # Get parameters
         self.com_port = self.get_parameter('com_port').value
@@ -67,7 +67,7 @@ class CoinFTPublisher(Node):
         if len(packet_size_excludeStartByte) < 1:
             raise RuntimeError("Failed to read packet size from sensor")
         self.packet_size_excludeStartByte = ord(packet_size_excludeStartByte) - 1
-        self.num_Channels = (self.packet_size_excludeStartByte - 2) // 2
+        self.num_Channels = (self.packet_size_excludeStartByte) // 2
         
         # Start streaming
         self.ser.write(b's')
@@ -98,7 +98,7 @@ class CoinFTPublisher(Node):
             end_byte = data[-1]
             if end_byte == self.END_BYTE:
                 sensor_data = []
-                for byte_num in range(0, self.packet_size_excludeStartByte-3, 2):
+                for byte_num in range(0, self.packet_size_excludeStartByte-1, 2):
                     low = data[byte_num]
                     high = data[byte_num+1]
                     val = low + 256*high

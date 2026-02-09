@@ -38,12 +38,12 @@ def generate_launch_description():
             name='visualft_coinft',
             output='screen',
             parameters=[{
-                'com_port': '/dev/ttyACM2',
+                'com_port': '/dev/ttyACM1',
                 'baud_rate': 1000000,
                 'frame_id': 'coinft_sensor',
                 'data_dir': '/home/li2053/Teo/VisionFT Files/data',
-                'model_file': 'PFT1-1_MLP_5L_norm_L2.onnx',
-                'norm_file': 'PFT1-1_norm_constants.mat',
+                'model_file': 'PFT5-1_MLP_5L_norm_L2.onnx',
+                'norm_file': 'PFT5-1_norm_constants.mat',
             }]
         ),
     ])
