@@ -134,6 +134,19 @@ TeleopConfig load_teleop_config(const std::string& path)
         cfg.dropout.decay_rate = get_or<double>(d, "decay_rate", cfg.dropout.decay_rate);
     }
 
+    // Z-approach mode
+    if (auto za = root["z_approach"]) {
+        cfg.z_approach.enabled = get_or<bool>(za, "enabled", cfg.z_approach.enabled);
+        if (za["xy_pos"] && za["xy_pos"].IsSequence() && za["xy_pos"].size() == 2) {
+            cfg.z_approach.xy_pos = Eigen::Vector2d(
+                za["xy_pos"][0].as<double>(), za["xy_pos"][1].as<double>());
+        }
+        cfg.z_approach.z_stiffness =
+            get_or<double>(za, "z_stiffness", cfg.z_approach.z_stiffness);
+        cfg.z_approach.z_damping =
+            get_or<double>(za, "z_damping", cfg.z_approach.z_damping);
+    }
+
     // Loop rate
     cfg.loop_rate_hz = get_or<double>(root, "loop_rate_hz", cfg.loop_rate_hz);
 
@@ -141,9 +154,16 @@ TeleopConfig load_teleop_config(const std::string& path)
     spdlog::info("  ZMQ: {}:{} (frames), {} (pause)",
         cfg.zmq.host, cfg.zmq.keypoint_port, cfg.zmq.pause_port);
     spdlog::info("  Loop rate: {} Hz", cfg.loop_rate_hz);
+    spdlog::info("  Mode: {}", cfg.z_approach.enabled ? "z-approach" : "full 6DOF");
     spdlog::info("  Orientation scale: {}", cfg.retargeting.orientation_scale);
     spdlog::info("  Deadzone: {} m", cfg.retargeting.deadzone_radius);
     spdlog::info("  Force threshold: {} N", cfg.safety.force_threshold);
+    if (cfg.z_approach.enabled) {
+        spdlog::info("  Z-approach XY: [{:.3f}, {:.3f}]",
+            cfg.z_approach.xy_pos.x(), cfg.z_approach.xy_pos.y());
+        spdlog::info("  Z-approach stiffness: {} N/m, damping: {}",
+            cfg.z_approach.z_stiffness, cfg.z_approach.z_damping);
+    }
 
     return cfg;
 }

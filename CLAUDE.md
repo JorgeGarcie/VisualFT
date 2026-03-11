@@ -25,6 +25,7 @@ VisualFT/
 │   │   ├── launch/
 │   │   │   ├── visionft.launch.py       — Sensor stack (camera + wrench + CoinFT)
 │   │   │   ├── scan.launch.py           — Launches C++ scan_controller + MCAP recording
+│   │   │   ├── teleop.launch.py         — Launches C++ teleop + ZMQ bridge + optional MCAP
 │   │   │   └── record.launch.py         — Manual MCAP recording
 │   │   └── config/
 │   │       └── example_session.yaml     — Multi-scan session template
@@ -86,6 +87,8 @@ ros2 launch visionft scan.launch.py scan_config:=/path/to/scan.yaml robot_config
 
 # VR teleop (Quest 3S hand tracking)
 ros2 run floating_scan teleop <teleop_config> <robot_config>
+# Or via launch file (includes ZMQ bridge + optional MCAP recording):
+ros2 launch visionft teleop.launch.py teleop_config:=/path/to/teleop.yaml robot_config:=/path/to/robot.yaml record:=true
 
 # Inference
 ros2 run inference tendon_inference

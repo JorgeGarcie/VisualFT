@@ -444,6 +444,47 @@ double now_seconds()
     return std::chrono::duration<double>(clock::now() - t0).count();
 }
 
+/** Log safety configuration and check if TCP is inside the workspace. */
+void print_safety_summary(const arm_commander::TeleopSafetyConfig& safety,
+    const arm_commander::ZApproachConfig& za,
+    const Eigen::Vector3d& current_tcp)
+{
+    Eigen::Vector3d box_size = safety.pos_max - safety.pos_min;
+    Eigen::Vector3d center = (safety.pos_max + safety.pos_min) / 2.0;
+
+    spdlog::info("--- TELEOP SAFETY CONFIGURATION ---");
+    spdlog::info("  Safe box min:  [{:.3f}, {:.3f}, {:.3f}] m",
+        safety.pos_min.x(), safety.pos_min.y(), safety.pos_min.z());
+    spdlog::info("  Safe box max:  [{:.3f}, {:.3f}, {:.3f}] m",
+        safety.pos_max.x(), safety.pos_max.y(), safety.pos_max.z());
+    spdlog::info("  Box size:      [{:.3f}, {:.3f}, {:.3f}] m",
+        box_size.x(), box_size.y(), box_size.z());
+    spdlog::info("  Box center:    [{:.3f}, {:.3f}, {:.3f}] m",
+        center.x(), center.y(), center.z());
+    spdlog::info("  Max lin vel:   {:.3f} m/s", safety.max_linear_vel);
+    spdlog::info("  Max ang vel:   {:.3f} rad/s", safety.max_angular_vel);
+    spdlog::info("  Force limit:   {:.1f} N", safety.force_threshold);
+    if (za.enabled) {
+        spdlog::info("  Mode:          z-approach (XY locked at [{:.3f}, {:.3f}])",
+            za.xy_pos.x(), za.xy_pos.y());
+    } else {
+        spdlog::info("  Mode:          full 6DOF");
+    }
+
+    // Check if current TCP is inside the safety box
+    bool inside = (current_tcp.array() >= safety.pos_min.array()).all() &&
+                  (current_tcp.array() <= safety.pos_max.array()).all();
+    if (inside) {
+        spdlog::info("  Current TCP:   [{:.3f}, {:.3f}, {:.3f}] -- INSIDE",
+            current_tcp.x(), current_tcp.y(), current_tcp.z());
+    } else {
+        spdlog::warn("  Current TCP:   [{:.3f}, {:.3f}, {:.3f}] -- OUTSIDE safety box!",
+            current_tcp.x(), current_tcp.y(), current_tcp.z());
+        spdlog::warn("  Move the robot inside the box before engaging teleop.");
+    }
+    spdlog::info("-----------------------------------");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -487,9 +528,30 @@ int main(int argc, char* argv[])
             auto init_state = commander.get_state();
             commander.stream_cartesian(init_state.tcp_pose, {0, 0, 0, 0, 0, 0});
         }
-        commander.set_impedance(
-            teleop_cfg.impedance.stiffness, teleop_cfg.impedance.damping);
         commander.set_force_control_axis({false, false, false, false, false, false});
+
+        // Configure impedance — z-approach uses compliant Z, full uses config
+        if (teleop_cfg.z_approach.enabled) {
+            double k_xy = teleop_cfg.impedance.stiffness[0];
+            double k_rot = teleop_cfg.impedance.stiffness[3];
+            commander.set_impedance(
+                {k_xy, k_xy, teleop_cfg.z_approach.z_stiffness,
+                 k_rot, k_rot, k_rot},
+                {0.7, 0.7, teleop_cfg.z_approach.z_damping, 0.7, 0.7, 0.7});
+            spdlog::info("Z-approach mode: XY K={}, Z K={}, Z damping={}",
+                k_xy, teleop_cfg.z_approach.z_stiffness,
+                teleop_cfg.z_approach.z_damping);
+        } else {
+            commander.set_impedance(
+                teleop_cfg.impedance.stiffness, teleop_cfg.impedance.damping);
+        }
+
+        // Print safety summary and verify TCP position
+        {
+            auto init_state = commander.get_state();
+            print_safety_summary(teleop_cfg.safety, teleop_cfg.z_approach,
+                rdk_pos(init_state.tcp_pose));
+        }
 
         // ── Set up ZMQ subscribers ──────────────────────────────────────────
         zmq::context_t zmq_ctx(1);
@@ -533,8 +595,17 @@ int main(int argc, char* argv[])
         int loop_count = 0;
         double t0 = now_seconds();
 
-        spdlog::info("=== VR Teleop Active ({} Hz) ===", teleop_cfg.loop_rate_hz);
+        std::string mode_label = teleop_cfg.z_approach.enabled
+            ? "z-approach" : "full 6DOF";
+        spdlog::info("=== VR Teleop Active ({} Hz, mode: {}) ===",
+            teleop_cfg.loop_rate_hz, mode_label);
         spdlog::info("  Quest APK button to engage/disengage teleop");
+        if (teleop_cfg.z_approach.enabled) {
+            spdlog::info("  Z-approach: XY locked at [{:.3f}, {:.3f}], VR controls Z only",
+                teleop_cfg.z_approach.xy_pos.x(), teleop_cfg.z_approach.xy_pos.y());
+        } else {
+            spdlog::info("  Full 6DOF: VR maps to all Cartesian axes");
+        }
         spdlog::info("  Ctrl+C to stop");
 
         // ── Main loop ───────────────────────────────────────────────────────
@@ -597,6 +668,13 @@ int main(int argc, char* argv[])
             Eigen::Vector3d current_pos = rdk_pos(robot_state.tcp_pose);
             Eigen::Quaterniond current_quat = rdk_quat(robot_state.tcp_pose);
 
+            // ── Fault check ─────────────────────────────────────────────────
+            if (robot_state.fault) {
+                spdlog::error("FAULT: Robot fault detected -- stopping teleop");
+                commander.stop();
+                break;
+            }
+
             // ── Force safety check ──────────────────────────────────────────
             double fmag = force_norm(robot_state.wrench_in_world);
             if (fmag > teleop_cfg.safety.force_threshold) {
@@ -613,6 +691,12 @@ int main(int argc, char* argv[])
             // ── Retarget ────────────────────────────────────────────────────
             auto [target_pos, target_quat] =
                 retargeter.retarget(vr_pos_safe, last_vr_rot, t);
+
+            // Z-approach mode: lock XY to configured position, VR controls Z only
+            if (teleop_cfg.z_approach.enabled) {
+                target_pos.x() = teleop_cfg.z_approach.xy_pos.x();
+                target_pos.y() = teleop_cfg.z_approach.xy_pos.y();
+            }
 
             // ── Velocity limit ──────────────────────────────────────────────
             if (has_last_cmd) {

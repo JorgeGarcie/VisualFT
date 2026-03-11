@@ -14,6 +14,7 @@ setup(
             'launch/visionft.launch.py',
             'launch/record.launch.py',
             'launch/scan.launch.py',
+            'launch/teleop.launch.py',
         ]),
         ('share/' + package_name + '/config', [
             'config/example_session.yaml',
@@ -33,6 +34,7 @@ setup(
             'visualft_coinft = visionft.coinft:main',
             # tendon_inference moved to the 'inference' package
             'grid_visualizer  = visionft.grid_visualizer:main',
+            'wait_for_coinft  = visionft.wait_for_coinft:main',
         ],
     },
 )

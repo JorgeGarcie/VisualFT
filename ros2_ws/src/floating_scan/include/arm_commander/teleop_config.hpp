@@ -63,6 +63,13 @@ struct TeleopSafetyConfig {
     double force_threshold = 25.0;  // N
 };
 
+struct ZApproachConfig {
+    bool enabled = false;                    // false = full 6DOF, true = z-approach
+    Eigen::Vector2d xy_pos{0.512, 0.260};   // locked XY position (metres)
+    double z_stiffness = 500.0;              // N/m — compliant Z for gentle contact
+    double z_damping = 0.8;                  // damping ratio for Z axis
+};
+
 struct TeleopImpedanceConfig {
     // Stiffness [Kx, Ky, Kz, Krx, Kry, Krz] (N/m, Nm/rad)
     std::array<double, 6> stiffness = {2000, 2000, 1500, 80, 80, 80};
@@ -92,6 +99,7 @@ struct TeleopConfig {
     TeleopImpedanceConfig impedance;
     OneEuroFilterConfig filter;
     DropoutConfig dropout;
+    ZApproachConfig z_approach;
     double loop_rate_hz = 90.0;
 };
 

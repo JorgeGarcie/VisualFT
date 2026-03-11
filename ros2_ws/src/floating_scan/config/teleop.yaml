@@ -5,8 +5,8 @@ loop_rate_hz: 90.0
 
 zmq:
   host: "localhost"
-  keypoint_port: 8089   # transformed_hand_frame from leapft pipeline
-  pause_port: 8102      # pause/resume from Quest APK button
+  keypoint_port: 8089   # leapft transformed_hand_frame (raw bytes, no bridge needed)
+  pause_port: 8102      # leapft pause state (raw bytes)
 
 retargeting:
   vr_workspace: 1.0              # hand tracking range (m)
@@ -29,6 +29,12 @@ safety:
 impedance:
   stiffness: [2000, 2000, 1500, 80, 80, 80]  # N/m, Nm/rad
   damping:   [0.7, 0.7, 0.7, 0.7, 0.7, 0.7]  # ratio [0.3 - 0.8]
+
+z_approach:
+  enabled: false                   # true = z-approach mode, false = full 6DOF
+  xy_pos: [0.512, 0.260]          # locked XY position (metres, phantom center)
+  z_stiffness: 500.0              # N/m — compliant Z for gentle contact
+  z_damping: 0.8                  # high damping — no bounce
 
 filter:
   freq: 90.0

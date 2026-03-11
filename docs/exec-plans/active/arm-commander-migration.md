@@ -106,23 +106,48 @@ Uses ArmCommander for the full sequence. Reads serial number from config (not CL
 - [x] Example config at `floating_scan/config/scan.yaml`
 - [x] Builds and installs as `scan_controller` executable
 - [x] **Hardware test** — validated, matches Python scan_node behavior
-- [ ] Retire old `scan_node.py` (keeping until confidence builds)
+- [x] Retire old `scan_node.py` (already deleted)
 
-## Step 4: teleop in C++
+## Step 4: teleop in C++ ✓
 
-- [ ] Port teleop from `interview_demos/teleop/` to C++ using ArmCommander
-- [ ] **Known risk**: Quest hand tracking currently uses Python pickle over ZMQ
-  - Option A: Change serialization to msgpack or protobuf (both have C++ and Python libs)
-  - Option B: Keep a thin Python ZMQ→ROS2 bridge that republishes hand poses as ROS2 messages, C++ teleop subscribes
-  - Option B is simpler, Option A is cleaner
+- [x] Port teleop from `interview_demos/teleop/` to C++ using ArmCommander
+  - `src/teleop.cpp`: main loop with ZMQ hand frame + pause subscribers
+  - `include/arm_commander/teleop_config.hpp` + `src/teleop_config.cpp`: YAML config
+  - `config/teleop.yaml`: all retargeting, safety, impedance, filter, dropout params
+  - `scripts/zmq_raw_publisher.py`: pickle-to-raw-bytes bridge for leapft pipeline
+- [x] **Pickle risk resolved**: raw bytes wire format (12 doubles for hand frame, 1 byte for pause)
+  - C++ uses `memcpy` to parse; Python bridge converts pickle to raw bytes
+  - No pickle, msgpack, or protobuf dependencies in C++
+- [x] TaskSpaceRetargeter: clutching, deadzone, 1-Euro filter, orientation scaling
+- [x] DropoutHandler: velocity extrapolation with exponential decay
+- [x] Safety: workspace bounds (retargeter + ArmCommander), velocity limits, force threshold, fault check
+- [x] Z-approach mode: XY locked to configured position, compliant Z impedance
+- [x] Safety summary at startup: logs bounds, checks TCP inside workspace
+- [x] Builds as `teleop` executable (requires cppzmq)
+- [ ] Hardware test (needs Quest 3S + leapft pipeline running)
 
-## Step 5: Remove dead Python code
+## Step 5: Remove dead Python code ✓
 
-- [ ] Delete `ros2_ws/src/common/` (Python types, config, errors)
-- [ ] Delete `ros2_ws/src/flexiv_driver/` (Python arm_commander, safety)
-- [ ] Delete `visionft/visionft/floating_scan.py` (superseded by C++ executable)
-- [ ] Delete `tests/unit/test_safety.py`, `tests/unit/test_arm_commander.py`
-- [ ] Clean up `setup.py` / `package.xml` references
+- [x] Delete `ros2_ws/src/common/` (already deleted in prior cleanup)
+- [x] Delete `ros2_ws/src/flexiv_driver/` (already deleted in prior cleanup)
+- [x] Delete `visionft/visionft/floating_scan.py` (already deleted in prior cleanup)
+- [x] Delete `tests/` (removed empty dir with stale __pycache__)
+- [x] `setup.py` / `package.xml` clean — no stale references to dead code
+
+## CoinFT Sensor Pipeline (parallel work)
+
+CoinFT node (`visionft/coinft.py`) upgraded with status/watchdog/recalibration support.
+This is the sensor-side complement to ArmCommander — application layer gates on CoinFT
+readiness before starting robot behavior (per "CoinFT readiness stays outside ArmCommander" decision).
+
+- [x] `/coinft/status` topic (10Hz): `INIT`, `COLLECTING_OFFSET`, `READY`, `ERROR`
+- [x] Watchdog: no valid serial packet for 1s → `ERROR` state (disconnect tested)
+- [x] Stale data detection: 50 consecutive identical raw readings → `ERROR` (frozen sensor)
+- [x] `/coinft/recalibrate` service (`std_srvs/Trigger`): resets offset + bias, re-collects 1500 samples
+- [x] Auto-recovery: if packets resume after `ERROR`, resets to `COLLECTING_OFFSET`
+- [x] `wait_for_coinft` gate utility: blocks until `READY`, used by `record.launch.py`
+- [x] `record.launch.py` updated: waits for CoinFT `READY` before starting MCAP recording
+- [x] **Hardware validated** — full init→offset→ready→recalibrate→ready cycle tested
 
 ## Superseded Python steps (for reference)
 
@@ -144,6 +169,7 @@ The original plan had Steps 1-4 in Python. These are now dead code:
 | 2026-03-11 | C++ ArmCommander class complete. floating_scan builds. First hardware test: ZeroFTSensor hung because busy() doesn't work for primitives. Fixed with wait_primitive() polling primitive_states(). Also fixed move_to() quaternion→Euler bug. Audit confirmed all RDK calls needed for Steps 2-4 are covered. |
 | 2026-03-11 | **Steps 1-2 validated on hardware.** Float mode works: home → zero FT → RT_JOINT_TORQUE with gravity comp + velocity damping. Requires `sudo` for RT scheduler thread priority. Damping values still need tuning. |
 | 2026-03-11 | **Step 3 validated on hardware.** scan_controller runs full state machine. Fixed: workspace bounds for scan region, mode switching before impedance config, replaced manual descent with Contact primitive. Matches Python scan_node behavior. |
+| 2026-03-11 | **CoinFT pipeline upgraded.** Added status topic, watchdog, recalibrate service, recording gate. Hardware validated: full init→offset→ready→recalibrate→ready cycle works. |
 
 ## Decision Log
 
