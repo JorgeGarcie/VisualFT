@@ -60,6 +60,18 @@ also duplicated across nodes. Should be one `config/robot.yaml` loaded at launch
 
 **FIX**: Archive or delete.
 
+## Action needed: Register CoinFT as robot tool for gravity compensation
+
+Flexiv SDK supports custom tool registration via `flexivrdk.Tool` + `ToolParams`
+(see `flexiv_hardware/rdk/example_py/basics8_update_robot_tool.py`). Setting
+mass, CoM, and inertia enables automatic gravity compensation for Float and
+all other modes.
+
+- [ ] Measure CoinFT mass, CoM, inertia (or get from datasheet)
+- [ ] Add tool config to `config/robot.yaml` (mass, CoM, inertia, TCP offset)
+- [ ] ArmCommander calls `tool.Add()` + `tool.Switch()` during init
+- [ ] Test floating mode with tool compensation active
+
 ## Deferred (interview_demos/)
 
 ~350 magic number violations in `interview_demos/sim/demo.py` — simulation config,

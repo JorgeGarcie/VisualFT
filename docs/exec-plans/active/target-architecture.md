@@ -29,46 +29,46 @@ reinvent the robot connection.
 │   of actions"        robot motion"                     │
 ├───────────────────────────────────────────────────────┤
 │                    Abstractions                        │
-│  RobotInterface         SensorManager                  │
-│  - move_to(pose)        - get_wrench() → Wrench        │
-│  - set_impedance(K,Z)   - get_image() → Image          │
-│  - zero_ft()            - healthy() → bool              │
-│  - get_state() → State  - wait_for_ready(timeout)       │
-│  - fault() → bool                                      │
-│  - home()               RecordingManager                │
-│  - stop()               - start_bag(name, topics)       │
-│                         - stop_bag()                    │
-│  SafetyMonitor (cross-cutting — wraps RobotInterface)  │
-│  - workspace bounds     - force/torque limits           │
-│  - velocity limits      - heartbeat timeout → stop      │
+│  ArmCommander          SensorManager                   │
+│  - move_to(pose)       - get_wrench() → Wrench         │
+│  - set_impedance(K,Z)  - get_image() → Image           │
+│  - zero_ft()           - healthy() → bool              │
+│  - get_state() → State - wait_for_ready(timeout)       │
+│  - fault() → bool     - track freshness()              │
+│  - home()             RecordingManager                 │
+│  - stop()             - start_bag(name, topics)        │
+│  - built-in safety    - stop_bag()                     │
+│    workspace heartbeat (streaming only)                │
+│    fault/force logging + SDK contact wrench            │
+│                         CoinFT readiness/staleness gate│
 ├───────────────────────────────────────────────────────┤
 │                    Drivers                             │
-│  FlexivRDKDriver      CoinFTDriver     CameraDriver   │
-│  (owns RDK conn)      (serial 360Hz)   (gscam2/UDP)   │
-│  heartbeat, fault     offset, ONNX     H264 decode     │
-│  monitoring           calibration                      │
+│  FlexivRDK binding    CoinFTDriver     CameraDriver   │
+│  (single conn, owned  (serial 360Hz)   (gscam2/UDP)   │
+│   by ArmCommander)    offset, ONNX     H264 decode    │
+│                       calibration                      │
 ├───────────────────────────────────────────────────────┤
 │                    Common                              │
-│  config.py   rdk_utils.py   types.py                   │
-│  robot SN    quat convert   RobotState, Wrench,        │
-│  limits      msg builders   ScanConfig dataclasses      │
+│  config.py   errors.py      types.py                   │
+│  robot SN    exceptions     RobotState, Wrench,        │
+│  limits                     ScanConfig dataclasses      │
 └───────────────────────────────────────────────────────┘
 ```
 
 ## The Abstractions
 
-### RobotInterface
+### ArmCommander
 
 The key abstraction. Applications never touch RDK directly. They call methods
-on RobotInterface, which handles mode switching, connection, heartbeat.
+on ArmCommander, which handles mode switching, connection, and robot-side safety.
 
 ```python
-class RobotInterface:
+class ArmCommander:
     """Single owner of the RDK connection."""
 
     def __init__(self, config: RobotConfig):
         self._robot = init_robot(config.serial_number)
-        self._heartbeat_thread = ...  # monitor connection health
+        self._watchdog_thread = ...  # monitor robot fault/force logs + stream heartbeat
 
     # --- Motion ---
     def move_to(self, pose: Pose, velocity: float = 0.05):
@@ -104,7 +104,10 @@ Why this matters:
 - scan_controller calls `robot.move_to(home)`, not `robot.SwitchMode(NRT_PRIMITIVE); robot.ExecutePrimitive("MoveL", ...)`
 - teleop_controller calls `robot.stream_cartesian(pose)`, not `robot.SendCartesianMotionForce(target, [0]*6, ...)`
 - Mode switching is internal — the application doesn't care which RDK mode it's in
-- Heartbeat monitoring is built in, not bolted on later
+- Robot safety is built in, not bolted on later
+- Velocity and acceleration limits live with the robot motion command, not a separate differential checker
+- Cartesian streaming should proactively configure SDK contact-wrench regulation
+- CoinFT readiness is not part of ArmCommander and remains a separate concern
 
 ### SensorManager
 
@@ -112,7 +115,7 @@ Why this matters:
 class SensorManager:
     """Aggregates sensor health and data access."""
 
-    def __init__(self, robot: RobotInterface, coinft_topic: str, camera_topic: str):
+    def __init__(self, robot: ArmCommander, coinft_topic: str, camera_topic: str):
         ...
 
     def get_wrench(self, source='robot') -> Wrench:
@@ -128,12 +131,19 @@ class SensorManager:
         """Block until listed sensors are publishing. Raise on timeout."""
 ```
 
+`SensorManager.wait_for_ready()` is where application preflight lives. For CoinFT,
+"ready" should mean the serial stream is open, samples are arriving, initialization
+or bias-zeroing has completed, and the latest wrench is finite and recent. That
+gate happens before starting behavior. Ongoing sensor freshness checks stay here
+too; they are not folded into ArmCommander. If a required sensor goes stale after
+startup, this higher layer should log the fault and pause robot behavior.
+
 ### What applications look like with these abstractions
 
 **scan_controller.py** (~150 lines instead of 600):
 ```python
 class ScanController:
-    def __init__(self, robot: RobotInterface, sensors: SensorManager,
+    def __init__(self, robot: ArmCommander, sensors: SensorManager,
                  recorder: RecordingManager, config: ScanConfig):
         self.robot = robot
         self.sensors = sensors
@@ -161,7 +171,7 @@ class ScanController:
 **teleop_controller.py** (~100 lines):
 ```python
 class TeleopController:
-    def __init__(self, robot: RobotInterface, vr: VRReader,
+    def __init__(self, robot: ArmCommander, vr: VRReader,
                  retargeter: TaskSpaceRetargeter):
         self.robot = robot
         ...
@@ -181,56 +191,64 @@ class TeleopController:
 Notice: neither application knows about `flexivrdk`, `SwitchMode`, quaternion
 ordering, or message building. They express intent, not mechanism.
 
-### SafetyMonitor
+### Safety Inside ArmCommander
 
-Cross-cutting concern — wraps RobotInterface so every command is bounds-checked
-before reaching RDK. Independent watchdog thread catches failures even if the
-application hangs.
+Robot safety is built into ArmCommander itself rather than added as a separate
+wrapper. That keeps the robot boundary explicit: ArmCommander owns robot safety,
+while SensorManager/application preflight owns CoinFT readiness and other
+non-robot sensor health.
 
 ```python
-class SafetyMonitor:
-    """Wraps RobotInterface. Every command passes through safety checks."""
+class SafetyChecker:
+    """Per-command safety checks before sending robot motion."""
 
-    def __init__(self, robot: RobotInterface, config: SafetyConfig):
-        self._robot = robot
+    def __init__(self, config: SafetyConfig):
         self._config = config
+
+    def check_workspace(self, pose: Pose):
+        if not self._config.workspace.contains(pose.position):
+            raise SafetyViolation(f"Pose {pose} outside workspace bounds")
+
+
+class ArmCommander:
+    def __init__(self, config: RobotConfig):
+        self._checker = SafetyChecker(config.safety)
+        self._streaming_active = False
+        self._last_stream_time = 0.0
         self._watchdog = threading.Thread(target=self._watchdog_loop, daemon=True)
-        self._last_command_time = time.monotonic()
         self._watchdog.start()
 
     def stream_cartesian(self, pose: Pose):
-        """Check bounds, then forward to robot."""
-        self._check_workspace(pose)
-        self._check_velocity(pose)
-        self._last_command_time = time.monotonic()
-        self._robot.stream_cartesian(pose)
+        self._checker.check_workspace(pose)
+        self._streaming_active = True
+        self._last_stream_time = time.monotonic()
+        self._send_cartesian_to_rdk(
+            pose,
+            max_linear_vel=self._config.max_linear_vel,
+            max_angular_vel=self._config.max_angular_vel,
+            max_linear_acc=self._config.max_linear_acc,
+            max_angular_acc=self._config.max_angular_acc,
+        )
 
-    def _check_workspace(self, pose: Pose):
-        """Raise SafetyViolation if pose is outside configured bounds."""
-        if not self._config.workspace.contains(pose.position):
-            self._robot.stop()
-            raise SafetyViolation(f"Pose {pose} outside workspace bounds")
-
-    def _check_force(self):
-        """Check current wrench against limits."""
-        wrench = self._robot.get_state().wrench
-        if abs(wrench.fz) > self._config.max_force_z:
-            self._robot.stop()
-            raise SafetyViolation(f"Force {wrench.fz}N exceeds limit")
+    def move_to(self, pose: Pose, velocity: float = 0.05):
+        self._checker.check_workspace(pose)
+        self._streaming_active = False
+        self._execute_movel_primitive(pose, velocity)
 
     def _watchdog_loop(self):
-        """Independent thread — catches hangs and faults."""
         while True:
             time.sleep(0.1)  # 10 Hz check
-            # Heartbeat timeout
-            if time.monotonic() - self._last_command_time > self._config.heartbeat_timeout:
-                self._robot.stop()
-                logging.error("Heartbeat timeout — robot stopped")
-            # Force check (always, regardless of application state)
-            self._check_force()
-            # Fault check
-            if self._robot.fault():
-                logging.error("Robot fault detected by watchdog")
+            state = self.get_state()
+            if abs(state.wrench.fz) > self._config.max_force_z:
+                logging.warning("Force limit observed by watchdog")
+            if self.fault():
+                logging.error("Robot fault observed by watchdog")
+            if self._streaming_active and (
+                time.monotonic() - self._last_stream_time
+                > self._config.heartbeat_timeout
+            ):
+                self.stop()
+                logging.error("Streaming heartbeat timeout — robot stopped")
 ```
 
 ```python
@@ -238,14 +256,32 @@ class SafetyMonitor:
 class SafetyConfig:
     workspace: BoundingBox       # min/max xyz
     max_force_z: float = 50.0   # N
-    max_velocity: float = 0.1   # m/s
+    max_contact_wrench: list[float] = [50, 50, 50, 10, 10, 10]
     heartbeat_timeout: float = 1.0  # seconds without command → stop
 ```
 
-Key design: applications use `SafetyMonitor` instead of `RobotInterface` directly.
-Safety cannot be bypassed — it's not a check the application opts into, it's
-the interface the application uses. The watchdog thread runs independently, so
-even if the application hangs or crashes, the robot gets stopped.
+Key design: applications use ArmCommander directly for robot control.
+Safety cannot be bypassed because it is part of ArmCommander itself. The watchdog
+thread runs independently. Robot fault and robot force observations are logged
+there for visibility, while streaming heartbeat timeout remains the active stop
+path for application-side hangs.
+
+Velocity and acceleration limits are part of the robot motion command itself.
+ArmCommander passes `max_linear_vel`, `max_angular_vel`, `max_linear_acc`, and
+`max_angular_acc` directly to `SendCartesianMotionForce()`. It does not compute
+a separate software "velocity" from consecutive setpoints and `dt`, because that
+is only a noisy proxy for differential command streams.
+
+For the contact-force edge case, ArmCommander should also configure
+`SetMaxContactWrench()` when entering Cartesian streaming mode. The RDK documents
+that as output regulation for the motion-controlled part of Cartesian
+motion-force control, which is stronger than merely logging a later force spike.
+
+Heartbeat is intentionally scoped to continuous streaming control only. It is not
+a global "every robot operation must issue a command every N seconds" rule,
+because blocking primitives like Home, MoveL, ZeroFTSensor, Contact, Float, or
+tool setup can legitimately take seconds to complete. During those operations,
+force and fault monitoring remain active while the heartbeat timeout is paused.
 
 ### Testing Strategy
 
@@ -254,7 +290,7 @@ first, then refactor with confidence.
 
 **Layer 1 — Unit tests (no hardware, no ROS2):**
 ```python
-class MockRobotInterface(RobotInterface):
+class MockArmCommander:
     """Records all calls, returns configurable state."""
     def __init__(self):
         self.calls = []
@@ -268,17 +304,16 @@ class MockRobotInterface(RobotInterface):
 
 # Test scan state machine logic
 def test_scan_skips_to_returning_when_no_passes():
-    robot = MockRobotInterface()
+    robot = MockArmCommander()
     config = ScanConfig(passes=[])
     controller = ScanController(robot, MockSensorManager(), MockRecorder(), config)
     controller.run_scan()
     assert ('home',) in robot.calls  # went home, didn't scan
 
 def test_safety_stops_on_workspace_violation():
-    robot = MockRobotInterface()
-    safety = SafetyMonitor(robot, SafetyConfig(workspace=BoundingBox(...)))
+    robot = MockArmCommander()
     with pytest.raises(SafetyViolation):
-        safety.stream_cartesian(Pose(x=99.0, y=0, z=0))  # way out of bounds
+        robot.stream_cartesian(Pose(x=99.0, y=0, z=0))  # way out of bounds
     assert ('stop',) in robot.calls
 ```
 
@@ -298,8 +333,8 @@ tests/
 ├── unit/
 │   ├── test_scan_controller.py
 │   ├── test_teleop_controller.py
-│   ├── test_safety_monitor.py
-│   └── test_rdk_utils.py
+│   ├── test_safety.py
+│   └── test_arm_commander.py
 ├── integration/
 │   ├── test_driver_node.py
 │   └── test_launch_files.py
@@ -309,9 +344,9 @@ tests/
 ```
 
 **Migration workflow:**
-1. Write unit tests for scan_controller logic using MockRobotInterface
+1. Write unit tests for scan_controller logic using MockArmCommander
 2. Verify tests pass against the mock
-3. Build RobotInterface wrapping real RDK
+3. Build ArmCommander wrapping real RDK
 4. Run same tests — if they pass, the abstraction is correct
 5. Swap scan_node for scan_controller — tests catch regressions
 
@@ -321,11 +356,8 @@ tests/
 ros2_ws/src/
 ├── flexiv_driver/                  ← driver layer
 │   ├── flexiv_driver/
-│   │   ├── robot_interface.py      ← RobotInterface class
-│   │   ├── safety_monitor.py       ← SafetyMonitor wrapping RobotInterface
-│   │   ├── driver_node.py          ← ROS2 node wrapping RobotInterface
-│   │   └── config.py               ← RobotConfig, SafetyConfig dataclasses
-│   └── package.xml
+│   │   ├── arm_commander.py        ← pure Python robot interface
+│   │   └── safety.py               ← SafetyChecker + SafetyWatchdog
 │
 ├── coinft_driver/                  ← already mostly clean, extract from visionft
 │   └── coinft_driver/
@@ -352,16 +384,17 @@ ros2_ws/src/
 ├── common/                         ← shared types and utilities
 │   ├── common/
 │   │   ├── types.py                ← RobotState, Wrench, Pose dataclasses
-│   │   ├── rdk_utils.py            ← quat conversion, msg builders
+│   │   ├── errors.py               ← shared exception hierarchy
 │   │   └── config.py               ← shared config loader
-│   └── package.xml
+│   └── config/
+│       └── robot.yaml              ← shared robot/safety config
 │
 └── tests/                          ← test suite
     ├── unit/
     │   ├── test_scan_controller.py
     │   ├── test_teleop_controller.py
-    │   ├── test_safety_monitor.py
-    │   └── test_rdk_utils.py
+    │   ├── test_safety.py
+    │   └── test_arm_commander.py
     ├── integration/
     │   ├── test_driver_node.py
     │   └── test_launch_files.py
@@ -381,26 +414,28 @@ ros2_ws/src/
 
 ### Phase 1: Foundation (next new feature)
 When building floating mode or next feature:
-- [ ] Create `RobotInterface` class wrapping RDK
-- [ ] Create `SafetyMonitor` wrapping RobotInterface
-- [ ] Create `MockRobotInterface` for testing
+- [ ] Create `ArmCommander` as the single RDK owner
+- [ ] Build `SafetyChecker` + `SafetyWatchdog` inside ArmCommander
+- [ ] Create `MockArmCommander` for testing
 - [ ] Write unit tests for safety (workspace bounds, force limits, heartbeat timeout)
-- [ ] Build the new feature against SafetyMonitor
+- [ ] Build the new feature against ArmCommander
 - [ ] Existing scan_node and teleop continue working as-is
+- [ ] Keep `common/` and `flexiv_driver/` as pure Python modules for now
 
 ### Phase 2: Migration (tests enable this)
 Write tests first, then migrate with confidence:
-- [ ] Write unit tests for scan state machine logic using MockRobotInterface
-- [ ] Migrate scan_node to use RobotInterface → becomes scan_controller
+- [ ] Write unit tests for scan state machine logic using MockArmCommander
+- [ ] Migrate scan_node to use ArmCommander → becomes scan_controller
 - [ ] Verify tests pass against both mock and real robot
 - [ ] Move teleop from interview_demos/ into visionft/teleop/
 - [ ] Extract coinft into its own package
 - [ ] Create shared config/robot.yaml
+- [ ] Add sensor preflight that waits for CoinFT readiness before behavior starts
 
 ### Phase 3: Cleanup
 - [ ] Remove legacy files (data_logger, flexiv.py, robot_publisher)
 - [ ] Remove old scan_node once scan_controller passes all tests
-- [ ] Remove rdk_cartesian_bridge (functionality absorbed by RobotInterface)
+- [ ] Remove rdk_cartesian_bridge (functionality absorbed by ArmCommander)
 - [ ] Integration tests for launch files
 
 ## Decision Log
@@ -408,11 +443,18 @@ Write tests first, then migrate with confidence:
 | Decision | Rationale | Date |
 |----------|-----------|------|
 | Migrate incrementally, not rewrite | Working system, solo dev, risk of breaking things | 2026-03-10 |
-| RobotInterface hides mode switching | Applications shouldn't care about NRT_PLAN vs NRT_CARTESIAN | 2026-03-10 |
+| ArmCommander hides mode switching | Applications shouldn't care about NRT_PLAN vs NRT_CARTESIAN | 2026-03-10 |
 | Keep scan and teleop as separate applications | Different concerns, different control loops, share hardware | 2026-03-10 |
-| Safety wraps RobotInterface, not alongside it | Cannot be bypassed — it IS the interface apps use | 2026-03-10 |
+| Safety lives inside ArmCommander | Cannot be bypassed and stays at the robot boundary | 2026-03-11 |
+| CoinFT readiness belongs to SensorManager/application preflight | Sensor initialization and freshness are not robot-driver concerns | 2026-03-11 |
+| Stale required sensors should pause behavior in the higher layer | Loss of required data is a behavior/application issue, not a robot-driver issue | 2026-03-11 |
+| Heartbeat timeout only applies to streaming control | Blocking primitives are legitimate long-running operations and should not false-stop | 2026-03-11 |
+| No differential `dt`-based velocity checker in ArmCommander | Differential setpoint deltas are a poor proxy for robot velocity; RDK motion limits are the source of truth | 2026-03-11 |
+| Keep a robot fault/force watchdog for observability | Flexiv already handles the low-level stop path; our layer should still log and surface those events | 2026-03-11 |
+| Configure SDK contact-wrench limits proactively in streaming mode | `SetMaxContactWrench()` is regulation, not just post-hoc observation, so it should be set before contact issues appear | 2026-03-11 |
+| Keep new layers pure Python for now | ROS packaging/wrappers can be added later if the migration needs them | 2026-03-11 |
 | Tests enable migration, not the other way around | Write tests for current behavior first, then refactor safely | 2026-03-10 |
-| MockRobotInterface for unit tests | Test state machine logic without hardware, fast CI | 2026-03-10 |
+| MockArmCommander for unit tests | Test state machine logic without hardware, fast CI | 2026-03-11 |
 
 ## Surprises
 
