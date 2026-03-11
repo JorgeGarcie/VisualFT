@@ -1,0 +1,54 @@
+# Data (19GB recordings)
+data/
+
+# External ROS2 packages (clone separately, see docs/getting-started.md)
+ros2_ws/src/flexiv_ros2/
+ros2_ws/src/gscam2/
+
+# Reference code from other projects
+interview_demos/check/
+
+# Separate project
+classifier/
+
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+.eggs/
+
+# Model weights
+*.pth
+*.onnx
+*.pt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env
+
+# MCAP bags (large binary)
+*.mcap
+
+# Logs
+*.log
+*.jsonl
+
+# Large media
+*.gif
+*.mp4
+*.avi

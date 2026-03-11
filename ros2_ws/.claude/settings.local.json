@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)",
+      "Bash(git submodule update:*)",
+      "Bash(source:*)",
+      "Bash(colcon build:*)",
+      "Bash(tree:*)",
+      "Bash(pip3 list:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(wc:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pip3 show:*)",
+      "Bash(PYTHONPATH=\"/home/li2053/.local/lib/python3.10/site-packages:$PYTHONPATH\" python3:*)",
+      "Bash(head:*)"
+    ]
+  }
+}

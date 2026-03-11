@@ -1,0 +1,29 @@
+# Example session config for scan_node
+#
+# Usage:
+#   ros2 launch visionft scan.launch.py session_config:=/home/li2053/VisualFT/ros2_ws/src/visionft/config/example_session.yaml
+#
+# Each scan runs the full state machine:
+#   HOMING → ZEROING_FT → DESCENDING → SCANNING (round-trip zigzag per orientation) → RETURNING
+# One MCAP bag per scan, saved to:
+#   ~/VisualFT/data/<session_name>/<idx>_<scan_name>/
+
+session_name: phantom_dataset_01
+
+# Default parameters shared by all scans (can be overridden per-scan)
+defaults:
+  home_pose: [512, 260, 45, 0.05, -179.44, 0]  # Elements: mm, deg
+  y_scan_range: 0.10    # m  (10 cm sweep along Y)
+  scan_speed: 0.01      # m/s
+  contact_force: 15.0   # N  (threshold for contact detection on descent)
+  search_velocity: 0.02 # m/s (descent speed)
+  rz_start: 0.0
+  rz_end: 175.0
+  rz_step: 5.0
+  rx_start: 0.0
+  rx_end: 15.0
+  rx_step: 5.0
+
+scans:
+  # Scan 1: full rotation sweep with default params
+  - name: full_sweep
