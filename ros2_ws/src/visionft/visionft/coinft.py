@@ -19,7 +19,8 @@ class CoinFTPublisher(Node):
         self.declare_parameter('com_port', '/dev/ttyACM0')
         self.declare_parameter('baud_rate', 1000000)
         self.declare_parameter('frame_id', 'coinft_sensor')
-        self.declare_parameter('data_dir', '/home/li2053/Teo/VisionFT Files/data')
+        self.declare_parameter('data_dir', os.path.join(
+            os.path.expanduser('~'), 'Teo', 'VisionFT Files', 'data'))
         self.declare_parameter('model_file', 'PFT5-1_MLP_5L_norm_L2.onnx')
         self.declare_parameter('norm_file', 'PFT5-1_norm_constants.mat')
         
@@ -182,7 +183,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        print(f"Error: {e}")
+        import traceback
+        print(f"Error: {e}\n{traceback.format_exc()}")
     finally:
         if 'node' in locals():
             node.shutdown()

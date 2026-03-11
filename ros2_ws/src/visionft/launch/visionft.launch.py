@@ -1,12 +1,14 @@
 ## Launch file for VisionFT nodes
 
+import os
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    # Declare launch argument for robot serial number
+    coinft_data_dir = os.path.join(
+        os.path.expanduser('~'), 'Teo', 'VisionFT Files', 'data')
 
-    
     return LaunchDescription([
 
         Node(
@@ -28,7 +30,7 @@ def generate_launch_description():
                 'com_port': '/dev/ttyACM1',
                 'baud_rate': 1000000,
                 'frame_id': 'coinft_sensor',
-                'data_dir': '/home/li2053/Teo/VisionFT Files/data',
+                'data_dir': coinft_data_dir,
                 'model_file': 'PFT5-1_MLP_5L_norm_L2.onnx',
                 'norm_file': 'PFT5-1_norm_constants.mat',
             }]

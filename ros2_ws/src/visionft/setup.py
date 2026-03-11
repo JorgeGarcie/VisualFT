@@ -28,17 +28,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            #'flexiv_publisher = visionft.flexiv:main', # NOT USED
             'wrench_plotter = visionft.wrench_plotter:main',
-            'plot_csv = visionft.plot_csv:main', # USED FOR PLOTTING CSV
-            'flexiv_wrench_publisher = visionft.robot_publisher:main',
+            'plot_csv = visionft.plot_csv:main',
             'visualft_coinft = visionft.coinft:main',
-            'data_logger = visionft.data_logger:main',
             # tendon_inference moved to the 'inference' package
             'grid_visualizer  = visionft.grid_visualizer:main',
-            'rdk_cartesian_bridge = visionft.rdk_cartesian_bridge:main',
-            'test_cartesian_rotation = visionft.test_cartesian_rotation:main',
-            'scan_node = visionft.scan_node:main',
         ],
     },
 )
