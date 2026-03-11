@@ -1,6 +1,6 @@
 # ExecPlan: ArmCommander Migration
 
-**Status**: In Progress
+**Status**: In Progress (pivoted to C++)
 **Created**: 2026-03-10
 **Author**: li2053
 **Motivated by**: Floating mode (admittance control) is the next feature. Building it
@@ -9,8 +9,8 @@ This is the turning point to consolidate.
 
 ## Goal
 
-Build `ArmCommander` as the single robot interface, use it for floating mode first,
-then migrate existing code incrementally with tests as the safety net.
+Build `ArmCommander` as the single robot interface in C++, use it for floating mode first,
+then migrate existing behavior scripts incrementally.
 
 ## Context
 
@@ -19,230 +19,160 @@ See `docs/exec-plans/active/target-architecture.md` for the full architecture re
 
 This plan is the **concrete implementation steps** — what to build, in what order.
 
+**2026-03-11 pivot**: Original plan was pure Python. Hardware testing revealed that
+the Float primitive does not exist in RDK v1.7. Floating requires `RT_JOINT_TORQUE`
+mode, which is only available through the C++ real-time scheduler at 1kHz. There is
+no reason to use Python for robot control — all behavior scripts move to C++.
+Python stays only for inference (PyTorch/ONNX), CoinFT (ONNX calibration), and camera.
+
 ## Architecture Summary
 
 ```
-Script (scan.py / teleop.py / floating.py)
+Script (floating_scan / scan_controller / teleop) — C++ executables
   │
   │ behavior logic
   ▼
-ArmCommander
-  ├── SafetyChecker (per-command, synchronous)
-  ├── SafetyWatchdog (own thread, continuous)
-  └── FlexivRDK (single connection, lock-protected)
+ArmCommander (C++ class, header + source in floating_scan or own library)
+  ├── SafetyChecker (per-command workspace check)
+  ├── SafetyWatchdog (own thread, heartbeat + force/fault logging)
+  └── flexiv::rdk::Robot (single connection, mutex-protected)
 ```
 
 Key design decisions:
 - ArmCommander owns the single RDK connection
-- threading.Lock protects all RDK access (watchdog + main thread)
+- `std::mutex` protects all RDK access (watchdog + main thread)
 - SafetyChecker validates every command before sending
 - SafetyWatchdog runs independently, catches faults/force/heartbeat
 - Force/fault watchdog is intentionally redundant with lower-level protections
-- Pure Python class, NOT a ROS2 node (testable without ROS2)
+- C++ class, NOT a ROS2 node (testable without ROS2)
 - ArmCommander is decoupled from CoinFT and other non-robot sensors
 - Sensor readiness is handled by the application layer before starting behavior
-- Scripts are behavior logic only — no RDK, no quaternion reorder
+- Config loaded from `robot.yaml` via yaml-cpp
 
-## Step 1: Common types and config
+**Language boundary**:
+- C++: all robot control (ArmCommander, behavior scripts, safety)
+- Python: inference node (PyTorch/ONNX), CoinFT node (ONNX calibration), camera node (gscam2)
+- ROS2 topics bridge the two worlds (wrench, pose, image, classification)
 
-Create shared dataclasses that ArmCommander and all scripts use.
+## Step 1: C++ ArmCommander class ✓
 
-- [x] `common/types.py`
-  - `Pose` (position xyz + quaternion xyzw, ROS2 convention)
-  - `RobotState` (pose, wrench, joint_positions, timestamp)
-  - `Wrench` (fx, fy, fz, tx, ty, tz)
-  - Conversion methods: `Pose.to_rdk()` → `[x,y,z,qw,qx,qy,qz]`
-  - Conversion methods: `Pose.from_rdk(list)` → `Pose`
+Build the ArmCommander as a C++ class in `ros2_ws/src/floating_scan/`.
+May later be extracted to its own library package if shared across multiple executables.
 
-- [x] `common/config.py`
-  - `RobotConfig` (serial_number, control_rate_hz, velocity/acc limits)
-  - `SafetyConfig` (workspace bounds, log thresholds, SDK contact-wrench limit, heartbeat timeout)
-  - Load from YAML: `config/robot.yaml`
+- [x] `include/arm_commander/arm_commander.hpp` + `src/arm_commander.cpp`
+  - Full API: connect, shutdown, home, zero_ft, contact, move_to, set_tool,
+    stream_cartesian, set_impedance, set_max_contact_wrench, set_force_control_axis,
+    float_joints (RT_JOINT_TORQUE + 1kHz scheduler), get_state, stop
+  - `RobotState` struct defined inline (no separate types header needed)
+  - Workspace check inline (`check_workspace()`) — stops robot on violation
+  - `request_stop()` / `stop_was_requested()` for signal handler integration
 
-- [x] `config/robot.yaml`
-  ```yaml
-  robot:
-    serial_number: Rizon4-062174
-    control_rate_hz: 50.0
-    max_linear_vel: 0.05
-    max_angular_vel: 0.5
-  safety:
-    workspace:  # metres
-      x: [0.2, 0.8]
-      y: [0.0, 0.5]
-      z: [0.0, 0.6]
-    max_force_z: 50.0
-    max_contact_wrench: [50.0, 50.0, 50.0, 10.0, 10.0, 10.0]
-    heartbeat_timeout: 2.0
-  ```
+- [x] `include/arm_commander/config.hpp` + `src/config.cpp`
+  - `RobotConfig`, `SafetyConfig`, `WorkspaceBounds` structs
+  - `load_config()` from YAML via yaml-cpp
 
-## Step 2: ArmCommander core
+- [ ] SafetyWatchdog (background thread)
+  - Not yet ported to C++ — workspace check works but no background monitoring
+  - Needed for: heartbeat timeout during streaming, force/fault logging
+  - Lower priority than getting floating working on hardware
 
-- [x] `flexiv_driver/arm_commander.py`
-  ```python
-  class ArmCommander:
-      def __init__(self, config: RobotConfig, safety_config: SafetyConfig)
+- [ ] Move `config/robot.yaml` into `floating_scan/config/` or shared location
+  - Currently at `ros2_ws/src/common/config/robot.yaml` (inside dead Python package)
+  - Values are correct (from tested teleop safety_config.py)
 
-      # Motion
-      def move_to(self, pose: Pose, velocity: float)     # blocking MoveL
-      def stream_cartesian(self, pose: Pose)              # NRT target
-      def set_impedance(self, stiffness, damping)
-      def zero_ft(self)                                   # blocking
-      def home(self)                                       # blocking
+## Step 2: floating_scan executable
 
-      # State
-      def get_state(self) -> RobotState
-      def fault(self) -> bool
-      def healthy(self) -> bool
+Built at `ros2_ws/src/floating_scan/src/floating_scan.cpp`. Compiles and installs.
+Uses ArmCommander for the full sequence. Reads serial number from config (not CLI arg).
 
-      # Lifecycle
-      def stop(self)
-      def shutdown(self)
-  ```
+- [x] Connect, home, zero FT via ArmCommander
+- [x] Enter float: `RT_JOINT_TORQUE`, gravity comp, velocity damping
+- [x] Ctrl+C → SIGINT → `request_stop()` → scheduler stops → shutdown
+- [x] Damping: joints 1-3 low (10,10,5), joints 4-7 high (20,20,20,20) — tune on hardware
+- [x] **Hardware test** — float mode validated on hardware (requires sudo for RT scheduler)
+- [ ] set_tool for CoinFT (when params available)
+- [ ] MCAP recording (separate launch or wrapper script)
+- [ ] Damping tuning (functional, values TBD)
 
-- [x] Thread safety: `threading.Lock` around ALL `self._robot` calls
-  - Watchdog thread reads `states()` at 50Hz
-  - Main thread calls `SendCartesianMotionForce` at control rate
-  - Lock prevents concurrent RDK access
+## Step 3: scan_controller in C++ ✓
 
-- [x] Mode switching internal to ArmCommander
-  - `move_to()` switches to NRT_PRIMITIVE internally, switches back after
-  - `stream_cartesian()` ensures NRT_CARTESIAN_MOTION_FORCE
-  - Scripts never call SwitchMode
+- [x] Port scan state machine (HOMING → ZEROING_FT → DESCENDING → SCANNING → RETURNING → DONE) to C++
+- [x] Uses ArmCommander for all robot interaction
+- [x] Descent uses Contact primitive (not manual stream+poll)
+- [x] Scan session config via yaml-cpp (`scan_config.hpp` + `scan_config.cpp`)
+- [x] MCAP bag recording subprocess management (fork/exec, SIGINT to stop)
+- [x] Multi-scan session support (same as Python scan_node)
+- [x] Extended ArmCommander: `wrench_in_world` in RobotState, velocity overrides in `stream_cartesian`
+- [x] Example config at `floating_scan/config/scan.yaml`
+- [x] Builds and installs as `scan_controller` executable
+- [x] **Hardware test** — validated, matches Python scan_node behavior
+- [ ] Retire old `scan_node.py` (keeping until confidence builds)
 
-## Step 3: Safety (two mechanisms)
+## Step 4: teleop in C++
 
-- [ ] `flexiv_driver/safety.py`
+- [ ] Port teleop from `interview_demos/teleop/` to C++ using ArmCommander
+- [ ] **Known risk**: Quest hand tracking currently uses Python pickle over ZMQ
+  - Option A: Change serialization to msgpack or protobuf (both have C++ and Python libs)
+  - Option B: Keep a thin Python ZMQ→ROS2 bridge that republishes hand poses as ROS2 messages, C++ teleop subscribes
+  - Option B is simpler, Option A is cleaner
 
-  **SafetyChecker** (synchronous, per-command):
-  - `check_workspace(pose)` → raises `SafetyViolation`
-  - Called inside `stream_cartesian()` and `move_to()`
-  - Stops the robot before raising if a command violates configured limits
-  - Does not estimate velocity from consecutive setpoints
+## Step 5: Remove dead Python code
 
-  **SafetyWatchdog** (own thread, continuous):
-  - Monitors force limits (reads `get_state().wrench`) for logging/observability
-  - Monitors robot fault for logging/observability
-  - Monitors heartbeat for streaming Cartesian control only
-  - Heartbeat timeout calls `robot.Stop()` and sets `_stopped`
-  - Uses same `threading.Lock` for RDK access
-  - Force/fault checks remain active while connected, even during blocking primitives
+- [ ] Delete `ros2_ws/src/common/` (Python types, config, errors)
+- [ ] Delete `ros2_ws/src/flexiv_driver/` (Python arm_commander, safety)
+- [ ] Delete `visionft/visionft/floating_scan.py` (superseded by C++ executable)
+- [ ] Delete `tests/unit/test_safety.py`, `tests/unit/test_arm_commander.py`
+- [ ] Clean up `setup.py` / `package.xml` references
 
-  **Heartbeat scope**:
-  - `stream_cartesian()` arms and refreshes the heartbeat
-  - `home()`, `move_to()`, `zero_ft()`, `contact()`, `float()`, and tool setup pause heartbeat monitoring
-  - Reason: long blocking primitives are legitimate robot work and must not false-trigger a timeout
+## Superseded Python steps (for reference)
 
-  **Motion limit source of truth**:
-  - Velocity and acceleration limits belong to `RobotConfig`, not `SafetyConfig`
-  - `stream_cartesian()` passes those limits directly to `SendCartesianMotionForce()`
-  - `stream_cartesian()` also programs `SetMaxContactWrench()` from config when entering Cartesian streaming mode
-  - No differential `dt`-based software velocity check inside ArmCommander
+The original plan had Steps 1-4 in Python. These are now dead code:
 
-  **Force threshold scope**:
-  - `max_force_z` in SafetyConfig is a watchdog logging threshold, not a stop trigger
-  - The *response* to force depends on application context (scan backs off, teleop vibrates, float ignores)
-  - Application-level behaviors should read `get_state().wrench` and react accordingly
-  - The real safety floor is firmware `SetMaxContactWrench` — that stops unconditionally
-  - `max_force_z` may move to per-behavior config in the future
-
-  **Sensor boundary**:
-  - CoinFT readiness and freshness are NOT handled inside ArmCommander
-  - Before behavior that depends on CoinFT, the application waits for sensor readiness
-  - After start, sensor freshness/health is tracked by the higher-level sensor/application layer
-  - If a required sensor goes stale, the higher-level layer pauses the robot/behavior and logs the fault
-
-- [ ] `common/errors.py`
-  - `VisionFTError` (base)
-  - `RobotFault`
-  - `SafetyViolation`
-  - `ConnectionLost`
-  - `SensorError`
-
-## Step 4: MockArmCommander + tests
-
-- [ ] `tests/mock_arm.py`
-  - Records all calls
-  - Configurable state returns
-  - Can simulate faults, force spikes
-
-- [x] `tests/unit/test_safety.py`
-  - Workspace violation → stop + raise
-  - Force limit → watchdog logs observation
-  - Robot fault → watchdog logs observation
-  - Heartbeat timeout during streaming → watchdog stops robot
-  - No heartbeat timeout during blocking primitive
-
-- [x] `tests/unit/test_arm_commander.py`
-  - Mode switching: move_to then stream_cartesian
-  - State reading
-  - Shutdown cleanup
-  - Cartesian streaming applies configured SDK contact-wrench limits
-
-  **Execution note**:
-  - These minimal unit tests were intentionally pulled forward during Step 3
-    because watchdog and safety-boundary changes are high-risk and cheap to
-    validate in pure Python
-  - `tests/mock_arm.py` and broader state-machine tests still remain as the
-    later migration test harness
-
-## Step 5: Floating mode (the actual feature)
-
-- [ ] `visionft/floating_mode.py`
-  - Uses ArmCommander (first real consumer)
-  - `set_impedance(K_x≈0, Z_x=configurable)` for backdriveable robot
-  - Service `/rdk/set_mode` to switch hold ↔ float
-  - Reads F/T for feedback display
-
-This is the validation — if floating mode works cleanly against ArmCommander,
-the abstraction is correct.
-
-## Step 6: Migrate scan_node (when ready)
-
-- [ ] Write unit tests for scan state machine using MockArmCommander
-- [ ] Create `scan_controller.py` using ArmCommander instead of raw RDK
-- [ ] Verify tests pass on mock, then on real robot
-- [ ] Retire old `scan_node.py`
-
-## Step 7: Migrate teleop (when ready)
-
-- [ ] Move from `interview_demos/teleop/` to `visionft/teleop/`
-- [ ] Replace `flexiv_commander.py` with ArmCommander
-- [ ] Keep VR reader, retargeting unchanged
+- ~~Step 1: `common/types.py`, `common/config.py`~~ → replaced by C++ `types.hpp`, `config.hpp`
+- ~~Step 2: `flexiv_driver/arm_commander.py`~~ → replaced by C++ `ArmCommander`
+- ~~Step 3: `flexiv_driver/safety.py`~~ → replaced by C++ `safety.hpp`
+- ~~Step 4: `tests/mock_arm.py`, `test_safety.py`, `test_arm_commander.py`~~ → dead code
+- ~~Step 5: `visionft/floating_scan.py`~~ → replaced by C++ `floating_scan.cpp`
 
 ## Progress
 
 | Date | Update |
 |------|--------|
-| 2026-03-10 | Architecture designed, plan written |
-| 2026-03-11 | Step 1 implemented; ArmCommander core implemented; safety boundary refined: heartbeat applies to streaming control only, CoinFT readiness stays above ArmCommander |
-| 2026-03-11 | Minimal `test_safety.py` and `test_arm_commander.py` pulled forward during Step 3 to validate watchdog semantics and motion-limit wiring before further migration |
-| 2026-03-11 | Added configured SDK contact-wrench regulation for Cartesian streaming; clarified that stale required sensors should pause behavior at the higher layer |
+| 2026-03-10 | Architecture designed, plan written (Python) |
+| 2026-03-11 | Step 1 implemented in Python; ArmCommander core, safety, minimal tests |
+| 2026-03-11 | **PIVOT**: Float primitive not in RDK v1.7. Floating requires RT_JOINT_TORQUE (C++ only, 1kHz). All robot control moves to C++. Python steps become dead code. |
+| 2026-03-11 | C++ ArmCommander class complete. floating_scan builds. First hardware test: ZeroFTSensor hung because busy() doesn't work for primitives. Fixed with wait_primitive() polling primitive_states(). Also fixed move_to() quaternion→Euler bug. Audit confirmed all RDK calls needed for Steps 2-4 are covered. |
+| 2026-03-11 | **Steps 1-2 validated on hardware.** Float mode works: home → zero FT → RT_JOINT_TORQUE with gravity comp + velocity damping. Requires `sudo` for RT scheduler thread priority. Damping values still need tuning. |
+| 2026-03-11 | **Step 3 validated on hardware.** scan_controller runs full state machine. Fixed: workspace bounds for scan region, mode switching before impedance config, replaced manual descent with Contact primitive. Matches Python scan_node behavior. |
 
 ## Decision Log
 
 | Decision | Rationale | Date |
 |----------|-----------|------|
-| ArmCommander is pure Python, not ROS2 node | Testable without ROS2, thin ROS2 wrapper added separately | 2026-03-10 |
-| threading.Lock on all RDK access | Watchdog + main thread share connection, RDK thread safety unknown | 2026-03-10 |
+| ~~ArmCommander is pure Python, not ROS2 node~~ | ~~Testable without ROS2~~ | ~~2026-03-10~~ |
+| **ArmCommander is C++** | RT_JOINT_TORQUE requires C++ 1kHz scheduler. No reason to keep Python for robot control. | 2026-03-11 |
+| threading/mutex on all RDK access | Watchdog + main thread share connection, RDK thread safety unknown | 2026-03-10 |
 | Safety built into ArmCommander, not separate wrapper | Simpler API, can't bypass, watchdog needs same robot reference | 2026-03-10 |
 | Build floating mode first against ArmCommander | Real feature validates the abstraction, not a dry refactor | 2026-03-10 |
-| Scripts are behavior logic only | No RDK imports, no quaternion handling, just Pose in/out | 2026-03-10 |
-| Common types with conversion methods | Pose.to_rdk() / Pose.from_rdk() — conversion in one place | 2026-03-10 |
-| Heartbeat timeout applies only to streaming Cartesian control | Blocking primitives like Home and MoveL are expected to run for seconds and must not false-stop | 2026-03-11 |
-| No software `dt`-based velocity checker in ArmCommander | Consecutive-setpoint velocity estimates are noisy for differential streaming; robot-side limits already exist in the RDK call | 2026-03-11 |
-| Force/fault watchdog is intentionally redundant | Independent monitoring provides logging and observability on top of Flexiv's built-in stop behavior | 2026-03-11 |
-| Program SDK contact-wrench limits in Cartesian streaming mode | Flexiv regulation should be configured proactively rather than inferred from later fault/force observations | 2026-03-11 |
-| CoinFT readiness stays outside ArmCommander | ArmCommander is the robot driver boundary; sensor gating belongs to the application/sensor layer | 2026-03-11 |
-| Stale required sensors pause behavior above ArmCommander | Sensor freshness is an application concern; the higher layer should log and pause when required data disappears | 2026-03-11 |
-| `common/` and `flexiv_driver/` stay pure Python for now | ROS packaging is unnecessary until these modules need to be colcon-installed or wrapped by ROS nodes | 2026-03-11 |
-| Pull minimal unit tests forward when changing safety-critical code | The plan order stays directional, but watchdog behavior should be validated immediately when implemented | 2026-03-11 |
+| Heartbeat timeout applies only to streaming Cartesian control | Blocking primitives like Home and MoveL run for seconds; must not false-stop | 2026-03-11 |
+| Force/fault watchdog is intentionally redundant | Independent monitoring provides logging and observability on top of Flexiv's built-in stop | 2026-03-11 |
+| Program SDK contact-wrench limits in Cartesian streaming mode | Flexiv regulation should be configured proactively | 2026-03-11 |
+| CoinFT readiness stays outside ArmCommander | ArmCommander is the robot driver boundary; sensor gating belongs to the application layer | 2026-03-11 |
+| Config via yaml-cpp, not ROS2 params | ArmCommander is not a ROS2 node; yaml-cpp keeps it standalone and testable | 2026-03-11 |
+| Python stays for inference, CoinFT, camera only | These nodes use PyTorch/ONNX and have no RT requirements | 2026-03-11 |
+| All behavior scripts (float, scan, teleop) are C++ | No advantage to Python when robot control is C++; single language for control stack | 2026-03-11 |
+| `common/` and `flexiv_driver/` Python packages are dead code | Superseded by C++ ArmCommander; will be removed in Step 5 | 2026-03-11 |
+| Wrench frame inconsistency (TCP vs world) | `rdk_cartesian_bridge` publishes TCP frame, `scan_node` publishes world frame on similar topics. Fix when building C++ ROS2 publisher layer: publish both on separate topics (`/rdk/wrench_tcp`, `/rdk/wrench_world`) with frame_id in header. | 2026-03-11 |
 
 ## Surprises
 
-(none yet)
+| Surprise | Impact | Date |
+|----------|--------|------|
+| Float primitive does not exist in RDK v1.7 | Floating requires `RT_JOINT_TORQUE` mode (C++, 1kHz real-time scheduler). This forced the entire pivot from Python to C++ for robot control. The Python ArmCommander, safety, types, config, and tests are all dead code now. | 2026-03-11 |
+| `busy()` doesn't work for primitives | SDK says "most primitives won't exit by themselves" — `busy()` stays true forever. Must poll `primitive_states()["terminated"]` or `["reachedTarget"]`. Caused ZeroFTSensor to hang on first hardware test. Fixed with `wait_primitive()` helper. | 2026-03-11 |
+| RT scheduler requires sudo | `SCHED_FIFO` for 1kHz loop needs root. Fix: either `setcap cap_sys_nice=ep` on binary (re-run after each build) or add `rtprio 99` + `memlock unlimited` to `/etc/security/limits.conf` for user. | 2026-03-11 |
 
 ## Outcomes
 
-**Result**: (filled when floating mode works on ArmCommander)
-**Follow-ups**: scan migration, teleop migration, legacy cleanup
+**Result**: (filled when floating mode works on C++ ArmCommander)
+**Follow-ups**: scan migration (C++), teleop migration (C++ + pickle risk), dead Python cleanup

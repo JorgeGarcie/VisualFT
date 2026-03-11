@@ -9,19 +9,22 @@ data layer; one exclusive RDK bridge owns the robot connection.
 ```
 VisualFT/
 ├── ros2_ws/src/
-│   ├── visionft/              — Primary package: robot control, scanning, sensing
+│   ├── floating_scan/         — C++ ArmCommander library + robot executables
+│   │   ├── include/arm_commander/  — ArmCommander class, config, safety
+│   │   ├── src/
+│   │   │   ├── floating_scan.cpp   — Hand-guided joint floating
+│   │   │   ├── scan_controller.cpp — Automated phantom scanning state machine
+│   │   │   └── teleop.cpp          — VR hand-tracking teleop (Quest 3S → ZMQ)
+│   │   └── config/                 — YAML configs (robot, scan, teleop)
+│   ├── visionft/              — Python sensors, visualization, utilities
 │   │   ├── visionft/
-│   │   │   ├── rdk_cartesian_bridge.py  — Exclusive RDK connection, 50Hz control loop
-│   │   │   ├── scan_node.py             — Automated phantom scanning state machine
 │   │   │   ├── coinft.py               — CoinFT serial reader + ONNX calibration (360Hz)
-│   │   │   ├── robot_publisher.py       — Legacy read-only wrench/pose publisher
 │   │   │   ├── grid_visualizer.py       — Live 2D workspace classification grid
 │   │   │   ├── wrench_plotter.py        — Live wrench plotting + CSV export
-│   │   │   ├── data_logger.py           — Legacy CSV/video logger (use MCAP instead)
-│   │   │   └── test_cartesian_rotation.py — Bridge verification test
+│   │   │   └── plot_csv.py             — Offline CSV plotting
 │   │   ├── launch/
 │   │   │   ├── visionft.launch.py       — Sensor stack (camera + wrench + CoinFT)
-│   │   │   ├── scan.launch.py           — Automated scan + MCAP recording
+│   │   │   ├── scan.launch.py           — Launches C++ scan_controller + MCAP recording
 │   │   │   └── record.launch.py         — Manual MCAP recording
 │   │   └── config/
 │   │       └── example_session.yaml     — Multi-scan session template
@@ -44,7 +47,7 @@ VisualFT/
 
 ## Key Concepts
 
-- **RDK Bridge**: Only one RDK connection allowed. `rdk_cartesian_bridge` or `scan_node` owns it (mutually exclusive).
+- **ArmCommander**: C++ class that owns the single RDK connection. All robot executables (floating_scan, scan_controller, teleop) use ArmCommander -- no direct RDK calls elsewhere.
 - **Pose Formats**: RDK=[x,y,z,qw,qx,qy,qz], ROS2=[x,y,z] + quat(x,y,z,w), Elements=[mm,mm,mm,deg,deg,deg]
 - **Scan State Machine**: HOMING → ZEROING_FT → DESCENDING → SCANNING → RETURNING → DONE
 - **CoinFT**: Serial 360Hz → 1500-sample offset → ONNX calibration → bias-zeroed wrench
@@ -73,11 +76,16 @@ VisualFT/
 # Sensor stack (camera + force sensors)
 ros2 launch visionft visionft.launch.py
 
-# Automated scan (auto-records, auto-exits)
-ros2 launch visionft scan.launch.py
+# Hand-guided floating (manual control)
+ros2 run floating_scan floating_scan <robot_config>
 
-# Bridge + manual control
-ros2 run visionft rdk_cartesian_bridge
+# Automated scan (auto-records, auto-exits)
+ros2 run floating_scan scan_controller <scan_config> <robot_config>
+# Or via launch file:
+ros2 launch visionft scan.launch.py scan_config:=/path/to/scan.yaml robot_config:=/path/to/robot.yaml
+
+# VR teleop (Quest 3S hand tracking)
+ros2 run floating_scan teleop <teleop_config> <robot_config>
 
 # Inference
 ros2 run inference tendon_inference

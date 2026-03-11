@@ -1,0 +1,44 @@
+# Teleop configuration for VR hand-tracking → Flexiv Rizon4
+# All values in SI units (metres, radians, N) unless noted.
+
+loop_rate_hz: 90.0
+
+zmq:
+  host: "localhost"
+  keypoint_port: 8089   # transformed_hand_frame from leapft pipeline
+  pause_port: 8102      # pause/resume from Quest APK button
+
+retargeting:
+  vr_workspace: 1.0              # hand tracking range (m)
+  robot_workspace: [0.7, 0.7, 0.7]  # scaling per axis
+  # VR → robot rotation matrix (row-major, 9 elements)
+  # Hand tracking axis swap: robot_X←VR_Y, robot_Y←-VR_X, robot_Z←VR_Z
+  vr_to_robot_rot: [0, 1, 0, -1, 0, 0, 0, 0, 1]
+  robot_home: [0.5, 0.0, 0.4]
+  deadzone_radius: 0.005         # m — VR deltas within this radius are zeroed
+  orientation_scale: 0.3         # reduce wrist rotation magnitude
+  hold_duration: 10              # frames to freeze after clutch engage
+
+safety:
+  pos_min: [0.35, -0.20, 0.08]
+  pos_max: [0.65,  0.20, 0.50]
+  max_linear_vel: 0.10           # m/s
+  max_angular_vel: 0.30          # rad/s
+  force_threshold: 25.0          # N — auto-stop if exceeded
+
+impedance:
+  stiffness: [2000, 2000, 1500, 80, 80, 80]  # N/m, Nm/rad
+  damping:   [0.7, 0.7, 0.7, 0.7, 0.7, 0.7]  # ratio [0.3 - 0.8]
+
+filter:
+  freq: 90.0
+  min_cutoff_pos: 2.0
+  beta_pos: 0.05
+  min_cutoff_rot: 1.5
+  beta_rot: 0.03
+  d_cutoff: 1.0
+
+dropout:
+  timeout_ms: 50.0
+  max_extrapolate_ms: 200.0
+  decay_rate: 5.0

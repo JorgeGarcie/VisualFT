@@ -1,0 +1,63 @@
+# Scan session config for scan_controller
+#
+# Usage:
+#   scan_controller config/scan.yaml [config/robot.yaml]
+#
+# Each scan runs the full state machine:
+#   HOMING -> ZEROING_FT -> DESCENDING -> SCANNING -> RETURNING
+# One MCAP bag per scan, saved to:
+#   <output_dir>/<session_name>/<idx>_<scan_name>/
+
+session_name: phantom_dataset_01
+
+# Global motion and impedance parameters (not per-scan)
+motion:
+  movel_vel: 0.05         # m/s for MoveL primitives
+  max_linear_vel: 0.05    # m/s streaming cap
+  max_angular_vel: 0.3    # rad/s
+  max_linear_acc: 0.3     # m/s^2
+  max_angular_acc: 0.5    # rad/s^2
+
+  # Impedance for scanning phase
+  z_stiffness: 5000.0     # N/m (Z: soft spring -- follows surface)
+  xy_stiffness: 5000.0    # N/m (XY: stiff -- stays on scan line)
+  rot_stiffness: 1500.0   # Nm/rad
+  damping_ratio: 0.8      # [0.3-0.8], high = no bounce
+
+  # Sinusoidal X oscillation during Y sweep
+  x_amplitude: 0.0        # m (0 = straight line, disabled)
+  x_period: 0.008         # m (full oscillation per Y distance)
+
+# MCAP recording settings
+record:
+  enabled: true
+  # output_dir: ~/VisualFT/data  # default if omitted
+  topics:
+    - /scan/state
+    - /rdk/tcp_pose
+    - /rdk/wrench
+    - /coinft/wrench
+    - /image_raw
+
+# Default scan parameters shared by all scans (can be overridden per-scan)
+defaults:
+  home_pose: [512, 260, 45, 0.05, -179.44, 0]  # [mm, mm, mm, deg, deg, deg]
+  y_scan_range: 0.10      # m (10 cm sweep along Y)
+  scan_speed: 0.01        # m/s
+  contact_force: 15.0     # N (threshold for contact detection on descent)
+  search_velocity: 0.02   # m/s (descent speed)
+  rz_start: 0.0
+  rz_end: 175.0
+  rz_step: 5.0
+  rx_start: 0.0
+  rx_end: 15.0
+  rx_step: 5.0
+
+scans:
+  # Scan 1: full rotation sweep with default params
+  - name: full_sweep
+
+  # Scan 2: narrow sweep with override
+  # - name: narrow_sweep
+  #   rz_end: 45.0
+  #   scan_speed: 0.005

@@ -7,18 +7,25 @@
                     │  Flexiv RDK  │  (C++ library, one connection only)
                     └──────┬───────┘
                            │ exclusive
-              ┌────────────┴────────────┐
-              │                         │
-    ┌─────────▼──────────┐   ┌─────────▼──────────┐
-    │ rdk_cartesian_bridge│   │     scan_node       │  ← mutually exclusive
-    │  (50Hz hold/cmd)   │   │ (state machine +    │
-    │                    │   │  MCAP recording)     │
-    └─────────┬──────────┘   └─────────┬───────────┘
-              │ publishes               │ publishes
-              ▼                         ▼
-     /rdk/tcp_pose              /rdk/tcp_pose
-     /rdk/wrench                /rdk/wrench
-     /rdk/cartesian_target ◄─── (subscribes)   /scan/state
+                    ┌──────▼───────────┐
+                    │  ArmCommander    │  (C++ class, owns RDK connection)
+                    │  config, safety, │
+                    │  all primitives  │
+                    └──────┬───────────┘
+                           │ used by
+              ┌────────────┼────────────┐
+              │            │            │
+    ┌─────────▼──────┐ ┌──▼──────────┐ ┌▼────────────┐
+    │ floating_scan  │ │scan_controller│ │   teleop    │
+    │ (hand-guided   │ │(auto scan    │ │(VR hand     │
+    │  joint float)  │ │ state machine│ │ tracking)   │
+    └────────────────┘ │ + MCAP rec)  │ └─────────────┘
+                       └──────┬───────┘
+                              │ publishes
+                              ▼
+                       /rdk/tcp_pose
+                       /rdk/wrench
+                       /scan/state
 ```
 
 ## Data Flow
@@ -32,20 +39,26 @@
  │ CoinFT   │ ────────────► │coinft.py│ ──────────────►
  └──────────┘                └─────────┘
 
- ┌──────────┐   RDK C++ API  ┌─────────────────────┐  /rdk/wrench
- │Flexiv Arm│ ◄────────────►│rdk_cartesian_bridge │ ──────────────►
- └──────────┘                │  OR scan_node       │  /rdk/tcp_pose
-                             └─────────────────────┘
-                                    ▲
-                                    │ /rdk/cartesian_target
-                             ┌──────┴──────┐
-                             │ User / Teleop│
-                             └─────────────┘
+ ┌──────────┐   RDK C++ API  ┌─────────────────┐  /rdk/wrench
+ │Flexiv Arm│ ◄────────────►│  ArmCommander   │ ──────────────►
+ └──────────┘                │  (C++ class)    │  /rdk/tcp_pose
+                             └────────┬────────┘
+                                      │ used by
+                    ┌─────────────────┼──────────────────┐
+                    │                 │                   │
+              floating_scan    scan_controller        teleop
+              (manual)         (automated)      (VR, Quest 3S → ZMQ)
 
                              ┌─────────────┐
-                    All ──► │  MCAP Bag    │  (ros2 bag record or scan_node internal)
+                    All ──► │  MCAP Bag    │  (ros2 bag record or scan_controller)
                              └─────────────┘
 ```
+
+## Language Boundary
+
+- **C++**: All robot control (ArmCommander, floating_scan, scan_controller, teleop)
+- **Python**: Sensors and ML only (CoinFT, gscam2, inference, grid_visualizer, wrench_plotter)
+- **Bridge**: ROS2 topics connect C++ and Python worlds
 
 ## Integration Points
 
@@ -53,15 +66,15 @@
 |----------|----------|------|--------|
 | RPi Camera → gscam2 | UDP H264 | ~30 Hz | GStreamer pipeline |
 | CoinFT → coinft.py | Serial | 360 Hz | Raw bytes → ONNX calibration |
-| Flexiv RDK ↔ Bridge | C++ API (Ethernet) | 50 Hz | [x,y,z,qw,qx,qy,qz] + [fx,fy,fz,tx,ty,tz] |
+| Flexiv RDK ↔ ArmCommander | C++ API (Ethernet) | 1kHz RT / 50Hz NRT | [x,y,z,qw,qx,qy,qz] + [fx,fy,fz,tx,ty,tz] |
 | ROS2 inter-node | DDS | varies | PoseStamped, WrenchStamped, Image, String, Int32 |
-| VR Teleop → Bridge | ZMQ (WiFi) | ~60 Hz | JSON poses via PUB/SUB |
+| VR Teleop → teleop | ZMQ (WiFi) | ~60 Hz | Hand poses via PUB/SUB |
 
 ## Dependency Rules
 
-- **rdk_cartesian_bridge** and **scan_node** are mutually exclusive — never run both
-- **robot_publisher** is legacy — do not run alongside bridge or scan_node
+- **ArmCommander** is the single RDK owner — no direct RDK calls outside this class
+- **floating_scan**, **scan_controller**, **teleop** are C++ executables that use ArmCommander
 - **inference** depends only on `/image_raw` (no force data)
 - **coinft** is standalone — no dependency on robot state
 - **gscam2** is standalone — no dependency on robot state
-- No ROS2 node may import `flexivrdk` directly except bridge and scan_node
+- No Python node imports `flexivrdk` — all robot control is C++
