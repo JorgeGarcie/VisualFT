@@ -21,7 +21,8 @@ ArmCommander::~ArmCommander()
 {
     try {
         shutdown();
-    } catch (...) {
+    } catch (const std::exception& e) {
+        spdlog::error("Exception in ~ArmCommander: {}", e.what());
     }
 }
 
@@ -223,6 +224,13 @@ void ArmCommander::set_force_control_axis(const std::array<bool, 6>& axes)
     robot_->SetForceControlAxis(axes);
 }
 
+void ArmCommander::set_force_control_frame(flexiv::rdk::CoordType frame)
+{
+    ensure_connected();
+    std::lock_guard<std::mutex> lock(mutex_);
+    robot_->SetForceControlFrame(frame);
+}
+
 // ── RT joint torque floating ───────────────────────────────────────────────
 
 void ArmCommander::float_joints(const std::vector<double>& damping_gains)
@@ -275,6 +283,66 @@ void ArmCommander::float_joints(const std::vector<double>& damping_gains)
 
     scheduler.Stop();
     spdlog::info("Floating stopped");
+}
+
+// ── Cartesian floating ─────────────────────────────────────────────────────
+
+void ArmCommander::float_cartesian(double loop_rate_hz)
+{
+    (void)loop_rate_hz;  // RT scheduler runs at 1kHz internally
+    ensure_connected();
+
+    // Send one NRT command to enter Cartesian mode so we can configure impedance
+    {
+        auto state = get_state();
+        std::lock_guard<std::mutex> lock(mutex_);
+        switch_mode(flexiv::rdk::Mode::NRT_CARTESIAN_MOTION_FORCE);
+        robot_->SendCartesianMotionForce(state.tcp_pose, {0, 0, 0, 0, 0, 0});
+    }
+
+    // Zero stiffness = free-floating on all Cartesian axes
+    set_force_control_axis({false, false, false, false, false, false});
+    set_impedance({0, 0, 0, 0, 0, 0}, {0.3, 0.3, 0.3, 0.3, 0.3, 0.3});
+
+    // Now switch to RT mode for true free-floating (NRT motion generator fights pushes)
+    auto* robot_ptr = robot_.get();
+    std::atomic<bool> sched_stop{false};
+
+    auto periodic_task = [robot_ptr, &sched_stop, this]() {
+        try {
+            if (robot_ptr->fault()) {
+                spdlog::error("Fault during Cartesian floating");
+                sched_stop = true;
+                return;
+            }
+
+            // Stream current pose back as target — with K=0 the position
+            // target is irrelevant but keeps the RT stream alive
+            auto tcp = robot_ptr->states().tcp_pose;
+            robot_ptr->StreamCartesianMotionForce(tcp, {0, 0, 0, 0, 0, 0});
+        } catch (const std::exception& e) {
+            spdlog::error("Cartesian float periodic: {}", e.what());
+            sched_stop = true;
+        }
+    };
+
+    flexiv::rdk::Scheduler scheduler;
+    scheduler.AddTask(periodic_task, "cartesian_float", 1, scheduler.max_priority());
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        switch_mode(flexiv::rdk::Mode::RT_CARTESIAN_MOTION_FORCE);
+    }
+
+    scheduler.Start();
+    spdlog::info("Cartesian floating active (RT) — move the robot by hand");
+
+    while (!sched_stop && !stop_requested_) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    scheduler.Stop();
+    spdlog::info("Cartesian floating stopped");
 }
 
 // ── State ──────────────────────────────────────────────────────────────────

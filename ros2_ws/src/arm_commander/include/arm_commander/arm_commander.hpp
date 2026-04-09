@@ -66,10 +66,15 @@ public:
         const std::array<double, 6>& damping);
     void set_max_contact_wrench(const std::array<double, 6>& wrench);
     void set_force_control_axis(const std::array<bool, 6>& axes);
+    void set_force_control_frame(flexiv::rdk::CoordType frame);
 
     // ── RT joint torque floating ───────────────────────────────────
     /** Enter RT_JOINT_TORQUE floating mode. Blocks until stop() or shutdown(). */
     void float_joints(const std::vector<double>& damping_gains);
+
+    // ── Cartesian floating ──────────────────────────────────────────
+    /** Enter NRT Cartesian floating (zero stiffness impedance). Blocks until stop. */
+    void float_cartesian(double loop_rate_hz = 90.0);
 
     // ── State ──────────────────────────────────────────────────────
     RobotState get_state();
