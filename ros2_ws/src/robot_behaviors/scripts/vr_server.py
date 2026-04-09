@@ -101,8 +101,10 @@ def recv_raw(sock):
     except zmq.Again:
         return None
     # Strip topic prefix (everything up to and including first space)
-    idx = raw.index(b' ') + 1
-    payload = raw[idx:]
+    idx = raw.find(b' ')
+    if idx == -1:
+        return None  # malformed packet, skip
+    payload = raw[idx + 1:]
     if len(payload) == 1:
         return struct.unpack('B', payload)[0]
     return np.frombuffer(payload, dtype=np.float64)

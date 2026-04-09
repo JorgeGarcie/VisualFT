@@ -9,8 +9,11 @@ data layer; one exclusive RDK bridge owns the robot connection.
 ```
 VisualFT/
 ├── ros2_ws/src/
-│   ├── floating_scan/         — C++ ArmCommander library + robot executables
+│   ├── arm_commander/          — C++ ArmCommander library (reusable robot interface)
 │   │   ├── include/arm_commander/  — ArmCommander class, config, safety
+│   │   └── src/                    — Library implementation
+│   ├── robot_behaviors/        — C++ robot behavior executables
+│   │   ├── include/robot_behaviors/ — App-specific configs (scan, teleop)
 │   │   ├── src/
 │   │   │   ├── floating_scan.cpp   — Hand-guided joint floating
 │   │   │   ├── scan_controller.cpp — Automated phantom scanning state machine
@@ -39,7 +42,7 @@ VisualFT/
 │   ├── flexiv_ros2/           — Flexiv RDK bindings, examples, utility functions
 │   ├── gscam2/                — GStreamer camera bridge (H264 UDP → /image_raw)
 │   └── ptrmu/                 — ROS2 shared utilities
-├── interview_demos/           — VR teleop demo (Quest 3S → ZMQ → Flexiv)
+├── references/                — Reference code (leapft, VR teleop prototype)
 ├── classifier/                — TendonClassifier training/labeling pipeline
 ├── scripts/
 │   └── extract_mcap.py        — MCAP bag → CSV/images extraction
@@ -48,7 +51,7 @@ VisualFT/
 
 ## Key Concepts
 
-- **ArmCommander**: C++ class that owns the single RDK connection. All robot executables (floating_scan, scan_controller, teleop) use ArmCommander -- no direct RDK calls elsewhere.
+- **ArmCommander**: C++ class (in `arm_commander` package) that owns the single RDK connection. All robot executables in `robot_behaviors` (floating_scan, scan_controller, teleop) use ArmCommander -- no direct RDK calls elsewhere.
 - **Pose Formats**: RDK=[x,y,z,qw,qx,qy,qz], ROS2=[x,y,z] + quat(x,y,z,w), Elements=[mm,mm,mm,deg,deg,deg]
 - **Scan State Machine**: HOMING → ZEROING_FT → DESCENDING → SCANNING → RETURNING → DONE
 - **CoinFT**: Serial 360Hz → 1500-sample offset → ONNX calibration → bias-zeroed wrench
@@ -78,15 +81,15 @@ VisualFT/
 ros2 launch visionft visionft.launch.py
 
 # Hand-guided floating (manual control)
-ros2 run floating_scan floating_scan <robot_config>
+ros2 run robot_behaviors floating_scan <robot_config>
 
 # Automated scan (auto-records, auto-exits)
-ros2 run floating_scan scan_controller <scan_config> <robot_config>
+ros2 run robot_behaviors scan_controller <scan_config> <robot_config>
 # Or via launch file:
 ros2 launch visionft scan.launch.py scan_config:=/path/to/scan.yaml robot_config:=/path/to/robot.yaml
 
 # VR teleop (Quest 3S hand tracking)
-ros2 run floating_scan teleop <teleop_config> <robot_config>
+ros2 run robot_behaviors teleop <teleop_config> <robot_config>
 # Or via launch file (includes ZMQ bridge + optional MCAP recording):
 ros2 launch visionft teleop.launch.py teleop_config:=/path/to/teleop.yaml robot_config:=/path/to/robot.yaml record:=true
 

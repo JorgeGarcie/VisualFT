@@ -40,8 +40,8 @@ RECORD_TOPICS = [
 ]
 
 VR_SERVER_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', '..', '..',
-    'interview_demos', 'teleop', 'vr_server.py')
+    os.path.dirname(__file__), '..', '..',
+    'robot_behaviors', 'scripts', 'vr_server.py')
 
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser('~'), 'VisualFT', 'data')
 
@@ -63,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
     # C++ teleop executable (subscribes to vr_server on ports 8089/8102)
     actions.append(ExecuteProcess(
         cmd=[
-            'ros2', 'run', 'floating_scan', 'teleop',
+            'ros2', 'run', 'robot_behaviors', 'teleop',
             teleop_config,
             robot_config,
         ],

@@ -5,11 +5,12 @@ data/
 ros2_ws/src/flexiv_ros2/
 ros2_ws/src/gscam2/
 
-# Reference code from other projects
-interview_demos/check/
+# Reference code (not part of the build)
+references/leapft/
+references/check/
 
-# Separate project
-classifier/
+# ROS2 colcon build logs
+ros2_ws/log/
 
 # ROS2 build artifacts
 build/
