@@ -71,6 +71,20 @@ def launch_setup(context, *args, **kwargs):
         name='teleop',
     ))
 
+    # Tactile camera stream (sensor cam → ZMQ → Quest)
+    stream = LaunchConfiguration('stream').perform(context).lower() == 'true'
+    if stream:
+        actions.append(ExecuteProcess(
+            cmd=['ros2', 'run', 'visionft', 'tactile_stream'],
+            output='screen',
+            name='tactile_stream',
+        ))
+        actions.append(ExecuteProcess(
+            cmd=['ros2', 'run', 'visionft', 'scene_stream'],
+            output='screen',
+            name='scene_stream',
+        ))
+
     # Optional MCAP recording
     if record:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -100,6 +114,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'robot_config',
             description='Path to robot.yaml config'),
+        DeclareLaunchArgument(
+            'stream',
+            default_value='false',
+            description='Stream camera feeds to VR headset (true/false)'),
         DeclareLaunchArgument(
             'record',
             default_value='false',

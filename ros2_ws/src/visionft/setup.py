@@ -35,6 +35,8 @@ setup(
             # tendon_inference moved to the 'inference' package
             'grid_visualizer  = visionft.grid_visualizer:main',
             'wait_for_coinft  = visionft.wait_for_coinft:main',
+            'tactile_stream   = visionft.tactile_stream:main',
+            'scene_stream     = visionft.scene_stream:main',
         ],
     },
 )
