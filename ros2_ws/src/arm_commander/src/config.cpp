@@ -62,6 +62,29 @@ RobotConfig load_config(const std::string& path)
         }
     }
 
+    // ── Validate ──────────────────────────────────────────────────────────
+    if (config.max_linear_vel <= 0.0)
+        throw std::runtime_error("robot.max_linear_vel must be positive");
+    if (config.max_angular_vel <= 0.0)
+        throw std::runtime_error("robot.max_angular_vel must be positive");
+    if (config.max_linear_acc <= 0.0)
+        throw std::runtime_error("robot.max_linear_acc must be positive");
+    if (config.max_angular_acc <= 0.0)
+        throw std::runtime_error("robot.max_angular_acc must be positive");
+    if (config.control_rate_hz <= 0.0)
+        throw std::runtime_error("robot.control_rate_hz must be positive");
+
+    auto& ws = config.safety.workspace;
+    if (ws.x_min >= ws.x_max)
+        throw std::runtime_error("safety.workspace: x_min must be < x_max");
+    if (ws.y_min >= ws.y_max)
+        throw std::runtime_error("safety.workspace: y_min must be < y_max");
+    if (ws.z_min >= ws.z_max)
+        throw std::runtime_error("safety.workspace: z_min must be < z_max");
+
+    if (config.safety.max_force_z <= 0.0)
+        throw std::runtime_error("safety.max_force_z must be positive");
+
     return config;
 }
 

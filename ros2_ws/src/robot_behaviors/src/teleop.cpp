@@ -19,7 +19,7 @@
 
 #include "arm_commander/arm_commander.hpp"
 #include "arm_commander/config.hpp"
-#include "arm_commander/teleop_config.hpp"
+#include "robot_behaviors/teleop_config.hpp"
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -27,6 +27,7 @@
 #include <zmq.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -34,24 +35,32 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
 
 // ── Signal handling ─────────────────────────────────────────────────────────
 
-arm_commander::ArmCommander* g_commander = nullptr;
+std::atomic<arm_commander::ArmCommander*> g_commander{nullptr};
 
 void SignalHandler(int signum)
 {
     (void)signum;
-    spdlog::info("Caught signal, shutting down...");
-    if (g_commander) {
-        g_commander->request_stop();
+    auto* cmd = g_commander.load(std::memory_order_acquire);
+    if (cmd) {
+        cmd->request_stop();
     }
 }
 
-// No default — robot config path must be provided as CLI arg.
+// ── ZMQ topic constants ─────────────────────────────────────────────────────
+
+constexpr std::string_view kTopicHandFrame = "transformed_hand_frame";
+constexpr std::string_view kTopicPause = "pause";
+
+// Topic prefix includes trailing space (wire format)
+const std::string kPrefixHandFrame = std::string(kTopicHandFrame) + " ";
+const std::string kPrefixPause = std::string(kTopicPause) + " ";
 
 // ── 1-Euro Filter ───────────────────────────────────────────────────────────
 
@@ -334,8 +343,7 @@ private:
 bool parse_hand_frame(const zmq::message_t& msg,
     Eigen::Vector3d& origin, Eigen::Matrix3d& rotation)
 {
-    const std::string topic_prefix = "transformed_hand_frame ";
-    const size_t prefix_len = topic_prefix.size();
+    const size_t prefix_len = kPrefixHandFrame.size();
     const size_t payload_size = 12 * sizeof(double);  // 96 bytes
 
     if (msg.size() < prefix_len + payload_size) {
@@ -343,11 +351,14 @@ bool parse_hand_frame(const zmq::message_t& msg,
     }
 
     // Verify topic prefix
-    if (std::memcmp(msg.data(), topic_prefix.data(), prefix_len) != 0) {
+    if (std::memcmp(msg.data(), kPrefixHandFrame.data(), prefix_len) != 0) {
         return false;
     }
 
-    // Parse 12 doubles from raw bytes
+    // Parse 12 little-endian doubles from raw bytes.
+    // Both x86_64 and aarch64 Linux are little-endian.
+    static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__,
+        "ZMQ wire format assumes little-endian doubles");
     double data[12];
     std::memcpy(data, static_cast<const char*>(msg.data()) + prefix_len, payload_size);
 
@@ -376,14 +387,13 @@ bool parse_hand_frame(const zmq::message_t& msg,
  */
 bool parse_pause(const zmq::message_t& msg, bool& paused)
 {
-    const std::string topic_prefix = "pause ";
-    const size_t prefix_len = topic_prefix.size();
+    const size_t prefix_len = kPrefixPause.size();
 
     if (msg.size() < prefix_len + 1) {
         return false;
     }
 
-    if (std::memcmp(msg.data(), topic_prefix.data(), prefix_len) != 0) {
+    if (std::memcmp(msg.data(), kPrefixPause.data(), prefix_len) != 0) {
         return false;
     }
 
@@ -515,7 +525,7 @@ int main(int argc, char* argv[])
 
         // ── Create ArmCommander ─────────────────────────────────────────────
         arm_commander::ArmCommander commander(robot_config);
-        g_commander = &commander;
+        g_commander.store(&commander, std::memory_order_release);
 
         // ── Connect + init ──────────────────────────────────────────────────
         commander.connect();
@@ -562,7 +572,7 @@ int main(int argc, char* argv[])
         std::string frame_addr = "tcp://" + teleop_cfg.zmq.host + ":" +
                                  std::to_string(teleop_cfg.zmq.keypoint_port);
         frame_sub.connect(frame_addr);
-        frame_sub.set(zmq::sockopt::subscribe, "transformed_hand_frame");
+        frame_sub.set(zmq::sockopt::subscribe, std::string(kTopicHandFrame));
         spdlog::info("ZMQ frame subscriber: {}", frame_addr);
 
         zmq::socket_t pause_sub(zmq_ctx, zmq::socket_type::sub);
@@ -571,7 +581,7 @@ int main(int argc, char* argv[])
         std::string pause_addr = "tcp://" + teleop_cfg.zmq.host + ":" +
                                  std::to_string(teleop_cfg.zmq.pause_port);
         pause_sub.connect(pause_addr);
-        pause_sub.set(zmq::sockopt::subscribe, "pause");
+        pause_sub.set(zmq::sockopt::subscribe, std::string(kTopicPause));
         spdlog::info("ZMQ pause subscriber: {}", pause_addr);
 
         // ── Create retargeter + filters ─────────────────────────────────────
@@ -750,17 +760,20 @@ int main(int argc, char* argv[])
         zmq_ctx.close();
 
     } catch (const std::exception& e) {
-        spdlog::error(e.what());
-        if (g_commander) {
+        spdlog::error("Fatal: {}", e.what());
+        auto* cmd = g_commander.load(std::memory_order_acquire);
+        if (cmd) {
             try {
-                g_commander->shutdown();
-            } catch (...) {
+                cmd->shutdown();
+            } catch (const std::exception& e2) {
+                spdlog::error("Shutdown failed: {}", e2.what());
             }
         }
+        g_commander.store(nullptr, std::memory_order_release);
         return 1;
     }
 
-    g_commander = nullptr;
+    g_commander.store(nullptr, std::memory_order_release);
     spdlog::info("Teleop shutdown complete.");
     return 0;
 }

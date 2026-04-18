@@ -124,7 +124,7 @@ Uses ArmCommander for the full sequence. Reads serial number from config (not CL
 - [x] Z-approach mode: XY locked to configured position, compliant Z impedance
 - [x] Safety summary at startup: logs bounds, checks TCP inside workspace
 - [x] Builds as `teleop` executable (requires cppzmq)
-- [ ] Hardware test (needs Quest 3S + leapft pipeline running)
+- [x] **Hardware test** — validated with Quest 3S + vr_server.py pipeline
 
 ## Step 5: Remove dead Python code ✓
 
@@ -148,6 +148,7 @@ readiness before starting robot behavior (per "CoinFT readiness stays outside Ar
 - [x] `wait_for_coinft` gate utility: blocks until `READY`, used by `record.launch.py`
 - [x] `record.launch.py` updated: waits for CoinFT `READY` before starting MCAP recording
 - [x] **Hardware validated** — full init→offset→ready→recalibrate→ready cycle tested
+- [ ] Stale data detection untested on hardware (can't easily force 50 identical serial readings from live sensor)
 
 ## Superseded Python steps (for reference)
 

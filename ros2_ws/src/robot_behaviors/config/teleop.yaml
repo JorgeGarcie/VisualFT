@@ -20,11 +20,11 @@ retargeting:
   hold_duration: 10              # frames to freeze after clutch engage
 
 safety:
-  pos_min: [0.35, -0.20, 0.08]
-  pos_max: [0.65,  0.20, 0.50]
+  pos_min: [0.30, -0.25, 0.03]
+  pos_max: [0.735, 0.25, 0.55]
   max_linear_vel: 0.10           # m/s
   max_angular_vel: 0.30          # rad/s
-  force_threshold: 25.0          # N — auto-stop if exceeded
+  force_threshold: 35.0          # N — auto-stop if exceeded
 
 impedance:
   stiffness: [2000, 2000, 1500, 80, 80, 80]  # N/m, Nm/rad

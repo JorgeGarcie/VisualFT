@@ -1,6 +1,6 @@
 """scan.launch.py
 
-Launches the C++ scan_controller executable from the floating_scan package.
+Launches the C++ scan_controller executable from the robot_behaviors package.
 The executable manages its own MCAP bag recording internally — one bag per
 scan in the session.  Exits automatically when all scans are done.
 
@@ -25,7 +25,7 @@ def generate_launch_description():
             description='Path to robot.yaml config'),
         ExecuteProcess(
             cmd=[
-                'ros2', 'run', 'floating_scan', 'scan_controller',
+                'ros2', 'run', 'robot_behaviors', 'scan_controller',
                 LaunchConfiguration('scan_config'),
                 LaunchConfiguration('robot_config'),
             ],

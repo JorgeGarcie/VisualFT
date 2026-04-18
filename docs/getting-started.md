@@ -6,7 +6,8 @@
 - Python 3.10 (system — `flexivrdk` not available on conda)
 - Flexiv Rizon4 robot (SN: Rizon4-062174) on Ethernet
 - CoinFT sensor on USB serial
-- Raspberry Pi camera streaming H264 over UDP
+- USB tactile camera (CoinFT sensor view) on `/dev/video2`
+- USB scene camera (3rd person view) on `/dev/video0`
 
 ## Build
 
@@ -24,7 +25,7 @@ source install/setup.bash
 ros2 launch visionft visionft.launch.py
 ```
 
-Starts: gscam2 (camera), flexiv_wrench_publisher (robot F/T), coinft (tactile sensor).
+Starts: usb_camera (tactile camera on `/dev/video2` → `/image_raw`), coinft (CoinFT sensor).
 
 ### 2. Automated Phantom Scan
 
@@ -54,14 +55,23 @@ ros2 run visionft rdk_cartesian_bridge
 ros2 run inference tendon_inference --ros-args -p model_dir:=/path/to/model
 ```
 
-### 5. VR Teleop (interview demo)
+### 5. VR Teleop
+
+See [getting-started-teleop.md](getting-started-teleop.md) for full setup instructions.
+
+### 6. LED + Vision Dashboard
+
+PyQt5 dashboard for LED control (Arduino NeoPixels), live CoinFT force plots, and 5x2 camera vision analytics. Requires the sensor stack running.
 
 ```bash
-cd interview_demos/teleop
-python3 teleop_main.py
+# Terminal 1: sensor stack
+ros2 launch visionft visionft.launch.py
+
+# Terminal 2: dashboard
+ros2 run visionft led_dashboard --led-port /dev/ttyACM0
 ```
 
-Requires Quest 3S on same WiFi network.
+Subscribes to `/image_raw` and `/coinft/wrench` from ROS2. LED panel runs in simulation mode if Arduino is not connected.
 
 ## Important Notes
 

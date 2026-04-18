@@ -20,7 +20,7 @@ import zmq
 def main():
     parser = argparse.ArgumentParser(description='Stream USB camera to ZMQ for VR')
     parser.add_argument('--device', type=int, default=0, help='Video device index')
-    parser.add_argument('--port', type=int, default=10005, help='ZMQ publish port')
+    parser.add_argument('--port', type=int, default=10505, help='ZMQ publish port')
     parser.add_argument('--width', type=int, default=640)
     parser.add_argument('--height', type=int, default=360)
     parser.add_argument('--fps', type=int, default=30)
@@ -46,6 +46,7 @@ def main():
     # ZMQ publisher
     ctx = zmq.Context()
     sock = ctx.socket(zmq.PUB)
+    sock.setsockopt(zmq.CONFLATE, 1)
     sock.bind(f'tcp://*:{args.port}')
     print(f'[CamBridge] Streaming on ZMQ port {args.port}')
 

@@ -6,7 +6,7 @@
  * This mirrors the Python scan_node's _get_scan_params() logic.
  */
 
-#include "arm_commander/scan_config.hpp"
+#include "robot_behaviors/scan_config.hpp"
 
 #include <yaml-cpp/yaml.h>
 
@@ -122,7 +122,10 @@ ScanSessionConfig load_scan_config(const std::string& path)
     // Default output dir if not set
     if (config.record.output_dir.empty()) {
         const char* home = std::getenv("HOME");
-        config.record.output_dir = std::string(home ? home : ".") + "/VisualFT/data";
+        if (!home) {
+            throw std::runtime_error("$HOME not set and record.output_dir not provided");
+        }
+        config.record.output_dir = std::string(home) + "/VisualFT/data";
     }
 
     // Build scan entries
@@ -145,8 +148,29 @@ ScanSessionConfig load_scan_config(const std::string& path)
         entry.params = session_defaults;
         apply_overrides(entry.params, scan_node);
 
+        // Validate per-scan params
+        const auto& p = entry.params;
+        if (p.scan_speed <= 0.0)
+            throw std::runtime_error("scan_speed must be positive (scan: " + entry.name + ")");
+        if (p.contact_force <= 0.0)
+            throw std::runtime_error("contact_force must be positive (scan: " + entry.name + ")");
+        if (p.search_velocity <= 0.0)
+            throw std::runtime_error("search_velocity must be positive (scan: " + entry.name + ")");
+        if (p.rz_step <= 0.0)
+            throw std::runtime_error("rz_step must be positive (scan: " + entry.name + ")");
+        if (p.y_scan_range <= 0.0)
+            throw std::runtime_error("y_scan_range must be positive (scan: " + entry.name + ")");
+        if (p.x_offsets_mm.empty())
+            throw std::runtime_error("x_offsets_mm must not be empty (scan: " + entry.name + ")");
+
         config.scans.push_back(std::move(entry));
     }
+
+    // Validate motion config
+    if (config.motion.max_linear_vel <= 0.0)
+        throw std::runtime_error("motion.max_linear_vel must be positive");
+    if (config.motion.movel_vel <= 0.0)
+        throw std::runtime_error("motion.movel_vel must be positive");
 
     return config;
 }

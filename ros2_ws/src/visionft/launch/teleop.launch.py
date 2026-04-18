@@ -39,9 +39,9 @@ RECORD_TOPICS = [
     '/image_raw',
 ]
 
+from ament_index_python.packages import get_package_prefix
 VR_SERVER_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..',
-    'robot_behaviors', 'scripts', 'vr_server.py')
+    get_package_prefix('robot_behaviors'), 'lib', 'robot_behaviors', 'vr_server.py')
 
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.expanduser('~'), 'VisualFT', 'data')
 

@@ -75,5 +75,6 @@ install(TARGETS floating_scan massage scan_controller DESTINATION lib/${PROJECT_
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
+install(PROGRAMS scripts/vr_server.py DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

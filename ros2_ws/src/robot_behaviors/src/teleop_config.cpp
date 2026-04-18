@@ -3,7 +3,7 @@
  * @brief YAML loader for TeleopConfig.
  */
 
-#include "arm_commander/teleop_config.hpp"
+#include "robot_behaviors/teleop_config.hpp"
 
 #include <yaml-cpp/yaml.h>
 #include <spdlog/spdlog.h>

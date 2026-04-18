@@ -35,7 +35,7 @@ class CoinFTPublisher(Node):
         super().__init__('coinft_wrench_publisher')
 
         # Declare parameters
-        self.declare_parameter('com_port', '/dev/ttyACM0')
+        self.declare_parameter('com_port', '/dev/ttyACM1')
         self.declare_parameter('baud_rate', 1000000)
         self.declare_parameter('frame_id', 'coinft_sensor')
         self.declare_parameter('data_dir', os.path.join(
@@ -90,8 +90,8 @@ class CoinFTPublisher(Node):
         # Status publish timer (10 Hz)
         self.create_timer(0.1, self._publish_status)
 
-        # Watchdog timer (5 Hz check)
-        self.create_timer(0.2, self._watchdog_check)
+        # Watchdog timer (5 Hz check) — disabled for debugging
+        # self.create_timer(0.2, self._watchdog_check)
 
         # Start sensor reading thread
         self._set_status(self.STATUS_COLLECTING_OFFSET)

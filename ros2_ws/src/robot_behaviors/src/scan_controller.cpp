@@ -28,12 +28,13 @@
 
 #include "arm_commander/arm_commander.hpp"
 #include "arm_commander/config.hpp"
-#include "arm_commander/scan_config.hpp"
+#include "robot_behaviors/scan_config.hpp"
 
 #include <Eigen/Geometry>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -50,14 +51,14 @@ namespace {
 
 // ── Signal handling ─────────────────────────────────────────────────────────
 
-arm_commander::ArmCommander* g_commander = nullptr;
+std::atomic<arm_commander::ArmCommander*> g_commander{nullptr};
 
 void SignalHandler(int signum)
 {
     (void)signum;
-    spdlog::info("Caught signal, shutting down...");
-    if (g_commander) {
-        g_commander->request_stop();
+    auto* cmd = g_commander.load(std::memory_order_acquire);
+    if (cmd) {
+        cmd->request_stop();
     }
 }
 
@@ -120,6 +121,10 @@ std::vector<ScanPass> build_passes(const arm_commander::ScanParams& p)
     auto rx_values = arange_inclusive(p.rx_start, p.rx_end, p.rx_step);
     const auto& x_offsets = p.x_offsets_mm;
 
+    if (x_offsets.empty()) {
+        throw std::runtime_error("x_offsets_mm must not be empty in scan config");
+    }
+
     std::vector<ScanPass> passes;
     for (size_t i = 0; i < rz_values.size(); ++i) {
         double x_m = x_offsets[i % x_offsets.size()] / 1000.0;
@@ -171,7 +176,8 @@ public:
         } else if (pid_ > 0) {
             spdlog::info("Recording -> {} (pid={})", bag_dir, pid_);
         } else {
-            spdlog::error("Failed to fork bag recorder");
+            spdlog::error("Failed to fork bag recorder: {}", strerror(errno));
+            throw std::runtime_error("Failed to spawn bag recorder");
         }
     }
 
@@ -351,7 +357,8 @@ bool run_scan(arm_commander::ArmCommander& commander,
                     params.scan_speed, motion.max_angular_vel,
                     motion.max_linear_acc, motion.max_angular_acc);
 
-                if (std::abs(current_y - target_y) < 0.002) {
+                constexpr double kPassCompleteTolerance = 0.002;  // metres
+                if (std::abs(current_y - target_y) < kPassCompleteTolerance) {
                     spdlog::info("Pass {}/{} done", pass_idx + 1, passes.size());
                     break;
                 }
@@ -362,9 +369,10 @@ bool run_scan(arm_commander::ArmCommander& commander,
             // Settle pause when config changes between passes
             if (pass_idx + 1 < passes.size()) {
                 const auto& next = passes[pass_idx + 1];
-                if (next.rz_offset != pass.rz_offset ||
-                    next.rx_offset != pass.rx_offset ||
-                    next.x_offset != pass.x_offset) {
+                constexpr double kEps = 1e-9;
+                if (std::abs(next.rz_offset - pass.rz_offset) > kEps ||
+                    std::abs(next.rx_offset - pass.rx_offset) > kEps ||
+                    std::abs(next.x_offset - pass.x_offset) > kEps) {
                     spdlog::info("Config change -> rz={}, rx={}, x={:.0f}mm (settling 0.5s)",
                         next.rz_offset, next.rx_offset, next.x_offset * 1000.0);
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -422,7 +430,7 @@ int main(int argc, char* argv[])
 
         // Create ArmCommander
         arm_commander::ArmCommander commander(robot_config);
-        g_commander = &commander;
+        g_commander.store(&commander, std::memory_order_release);
 
         // Connect
         commander.connect();
@@ -448,17 +456,20 @@ int main(int argc, char* argv[])
         commander.shutdown();
 
     } catch (const std::exception& e) {
-        spdlog::error(e.what());
-        if (g_commander) {
+        spdlog::error("Fatal: {}", e.what());
+        auto* cmd = g_commander.load(std::memory_order_acquire);
+        if (cmd) {
             try {
-                g_commander->shutdown();
-            } catch (...) {
+                cmd->shutdown();
+            } catch (const std::exception& e2) {
+                spdlog::error("Shutdown failed: {}", e2.what());
             }
         }
+        g_commander.store(nullptr, std::memory_order_release);
         return 1;
     }
 
-    g_commander = nullptr;
+    g_commander.store(nullptr, std::memory_order_release);
     spdlog::info("Done");
     return 0;
 }

@@ -20,6 +20,7 @@
     │ (hand-guided   │ │(auto scan    │ │(VR hand     │
     │  joint float)  │ │ state machine│ │ tracking)   │
     └────────────────┘ │ + MCAP rec)  │ └─────────────┘
+           └──── robot_behaviors package ─────┘
                        └──────┬───────┘
                               │ publishes
                               ▼
@@ -56,7 +57,7 @@
 
 ## Language Boundary
 
-- **C++**: All robot control (ArmCommander, floating_scan, scan_controller, teleop)
+- **C++**: All robot control (`arm_commander` library + `robot_behaviors` executables)
 - **Python**: Sensors and ML only (CoinFT, gscam2, inference, grid_visualizer, wrench_plotter)
 - **Bridge**: ROS2 topics connect C++ and Python worlds
 
@@ -70,10 +71,48 @@
 | ROS2 inter-node | DDS | varies | PoseStamped, WrenchStamped, Image, String, Int32 |
 | VR Teleop → teleop | ZMQ (WiFi) | ~60 Hz | Hand poses via PUB/SUB |
 
+## ZMQ Serialization (Python → C++)
+
+The VR teleop pipeline crosses the language boundary via ZMQ with **raw bytes** — no
+pickle, no protobuf, just `numpy.tobytes()` on the Python side and `std::memcpy()` on C++.
+
+**Wire format:** each message is an ASCII topic prefix (space-terminated) followed by a
+fixed-size binary payload.
+
+| Topic | Payload | Size |
+|-------|---------|------|
+| `transformed_hand_frame ` | 12 × `float64` (origin, x/y/z axes) | 96 bytes |
+| `pause ` | 1 × `uint8` (0 = STOP, 1 = CONT) | 1 byte |
+
+**Python (publish):**
+```python
+prefix = f'{topic} '.encode('utf-8')
+buffer = np.asarray(data, dtype=np.float64).ravel().tobytes()   # or struct.pack('B', val)
+sock.send(prefix + buffer)
+```
+
+**C++ (subscribe):**
+```cpp
+double data[12];
+std::memcpy(data, static_cast<const char*>(msg.data()) + prefix_len, 12 * sizeof(double));
+```
+
+**Why raw bytes instead of pickle/protobuf:**
+- Zero-copy compatible — `memcpy` straight into Eigen vectors on the C++ side
+- No serialization library needed across the language boundary
+- Fixed-size payloads make validation trivial (prefix check + size check)
+- ZMQ `CONFLATE` drops stale frames automatically, so only the newest hand pose arrives
+
+**Pipeline:**
+```
+Quest 3S → vr_server.py (PUB raw bytes, ports 8089/8102)
+         → teleop.cpp   (SUB, memcpy → Eigen, Cartesian impedance commands)
+```
+
 ## Dependency Rules
 
-- **ArmCommander** is the single RDK owner — no direct RDK calls outside this class
-- **floating_scan**, **scan_controller**, **teleop** are C++ executables that use ArmCommander
+- **arm_commander** package is the single RDK owner — no direct RDK calls outside this library
+- **robot_behaviors** package contains C++ executables (floating_scan, scan_controller, teleop) that link against arm_commander
 - **inference** depends only on `/image_raw` (no force data)
 - **coinft** is standalone — no dependency on robot state
 - **gscam2** is standalone — no dependency on robot state

@@ -12,9 +12,9 @@
 namespace arm_commander {
 
 struct WorkspaceBounds {
-    double x_min = 0.39, x_max = 0.685;
-    double y_min = -0.108, y_max = 0.430;
-    double z_min = -0.02, z_max = 0.23;
+    double x_min = 0.30, x_max = 0.735;
+    double y_min = -0.25, y_max = 0.430;
+    double z_min = -0.02, z_max = 0.55;
 
     bool contains(double x, double y, double z) const
     {

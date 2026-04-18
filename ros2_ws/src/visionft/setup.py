@@ -37,6 +37,8 @@ setup(
             'wait_for_coinft  = visionft.wait_for_coinft:main',
             'tactile_stream   = visionft.tactile_stream:main',
             'scene_stream     = visionft.scene_stream:main',
+            'led_dashboard    = visionft.led_dashboard:main',
+            'usb_camera       = visionft.usb_camera:main',
         ],
     },
 )

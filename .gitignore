@@ -1,13 +1,17 @@
 # Data (19GB recordings)
 data/
+ros2_ws/captures/
+ros2_ws/recordings/
 
 # External ROS2 packages (clone separately, see docs/getting-started.md)
 ros2_ws/src/flexiv_ros2/
 ros2_ws/src/gscam2/
 
 # Reference code (not part of the build)
-references/leapft/
-references/check/
+references/
+
+# Separate project
+classifier/
 
 # ROS2 colcon build logs
 ros2_ws/log/

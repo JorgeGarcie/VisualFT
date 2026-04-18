@@ -1,8 +1,9 @@
 /**
  * @file floating_scan.cpp
- * @brief Hand-guided scanning: home → zero FT → RT joint floating.
+ * @brief Hand-guided scanning: home → zero FT → Cartesian floating.
  *
- * First consumer of ArmCommander. Config from robot.yaml.
+ * Uses NRT Cartesian impedance with zero stiffness for free-floating
+ * in Cartesian space (operator pushes TCP, it moves in straight lines).
  *
  * Usage:
  *     floating_scan <config_path>
@@ -15,31 +16,24 @@
 
 #include <spdlog/spdlog.h>
 
+#include <atomic>
 #include <csignal>
 #include <iostream>
 #include <string>
 
 namespace {
 
-/** Pointer for signal handler access */
-arm_commander::ArmCommander* g_commander = nullptr;
-
-/**
- * Joint velocity damping gains.
- * Joints 1-3 (shoulder/elbow): low damping → free translation.
- * Joints 4-7 (wrist): high damping → resist rotation.
- * Tune on hardware.
- */
-const std::vector<double> kFloatingDamping = {10.0, 10.0, 5.0, 20.0, 20.0, 20.0, 20.0};
+/** Atomic pointer for safe signal handler access. */
+std::atomic<arm_commander::ArmCommander*> g_commander{nullptr};
 
 }  // namespace
 
 void SignalHandler(int signum)
 {
     (void)signum;
-    spdlog::info("Caught signal, shutting down...");
-    if (g_commander) {
-        g_commander->request_stop();
+    auto* cmd = g_commander.load(std::memory_order_acquire);
+    if (cmd) {
+        cmd->request_stop();
     }
 }
 
@@ -64,31 +58,34 @@ int main(int argc, char* argv[])
 
         // Create ArmCommander
         arm_commander::ArmCommander commander(config);
-        g_commander = &commander;
+        g_commander.store(&commander, std::memory_order_release);
 
-        // Sequence: connect → home → zero FT → float
+        // Sequence: connect → home → zero FT → Cartesian float
         commander.connect();
         commander.home();
         commander.zero_ft();
 
         spdlog::info("Press Ctrl+C to stop");
-        commander.float_joints(kFloatingDamping);
+        commander.float_joints({10.0, 10.0, 8.0, 4.0, 4.0, 4.0, 4.0});
 
-        // float_joints blocks until stop requested
+        // float_cartesian blocks until stop requested
         commander.shutdown();
 
     } catch (const std::exception& e) {
-        spdlog::error(e.what());
-        if (g_commander) {
+        spdlog::error("Fatal: {}", e.what());
+        auto* cmd = g_commander.load(std::memory_order_acquire);
+        if (cmd) {
             try {
-                g_commander->shutdown();
-            } catch (...) {
+                cmd->shutdown();
+            } catch (const std::exception& e2) {
+                spdlog::error("Shutdown failed: {}", e2.what());
             }
         }
+        g_commander.store(nullptr, std::memory_order_release);
         return 1;
     }
 
-    g_commander = nullptr;
+    g_commander.store(nullptr, std::memory_order_release);
     spdlog::info("Done");
     return 0;
 }

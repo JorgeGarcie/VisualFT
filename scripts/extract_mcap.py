@@ -24,7 +24,7 @@ import numpy as np
 from mcap_ros2.reader import read_ros2_messages
 
 
-DEFAULT_OUTPUT = Path("/home/li2053/VisualFT/classifier/TendonClassifier/scripts/labeling/rawdata")
+DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "classifier" / "TendonClassifier" / "scripts" / "labeling" / "rawdata"
 
 
 def extract_bag(bag_dir: Path, output_dir: Path):
