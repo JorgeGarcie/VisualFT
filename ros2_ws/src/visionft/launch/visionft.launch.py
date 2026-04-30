@@ -21,8 +21,8 @@ def generate_launch_description():
 
         Node(
             package='visionft',
-            executable='visualft_coinft',
-            name='visualft_coinft',
+            executable='coinft',
+            name='coinft',
             output='screen',
             parameters=[{
                 'com_port': '/dev/ttyACM1',

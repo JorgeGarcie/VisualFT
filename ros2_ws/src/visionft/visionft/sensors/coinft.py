@@ -29,7 +29,7 @@ class CoinFTPublisher(Node):
 
     OFFSET_SAMPLE_COUNT = 1500
     WATCHDOG_TIMEOUT_S = 1.0  # no valid packet for 1s → ERROR
-    STALE_IDENTICAL_LIMIT = 50  # 50 identical readings (~140ms at 360Hz) → frozen
+    STALE_IDENTICAL_LIMIT = 50  # 50 identical readings (~167ms at 300Hz) → frozen. TODO: untested on live hardware
 
     def __init__(self):
         super().__init__('coinft_wrench_publisher')
@@ -127,7 +127,7 @@ class CoinFTPublisher(Node):
 
         self.ser.write(b's')
         self.get_logger().info(
-            f"Sensor initialized: {self.num_channels} channels, streaming at ~360Hz")
+            f"Sensor initialized: {self.num_channels} channels, streaming at ~300Hz")
 
     def _set_status(self, new_status: str):
         """Thread-safe status update with logging on transitions."""
@@ -175,7 +175,7 @@ class CoinFTPublisher(Node):
         return response
 
     def _read_loop(self):
-        """Main sensor read thread: serial → offset → calibrate → publish at ~360Hz."""
+        """Main sensor read thread: serial → offset → calibrate → publish at ~300Hz."""
         self.get_logger().info("Read loop started")
 
         while not self._stop_flag and rclpy.ok():

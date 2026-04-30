@@ -29,16 +29,19 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'wrench_plotter = visionft.wrench_plotter:main',
-            'plot_csv = visionft.plot_csv:main',
-            'visualft_coinft = visionft.coinft:main',
-            # tendon_inference moved to the 'inference' package
-            'grid_visualizer  = visionft.grid_visualizer:main',
-            'wait_for_coinft  = visionft.wait_for_coinft:main',
-            'tactile_stream   = visionft.tactile_stream:main',
-            'scene_stream     = visionft.scene_stream:main',
-            'led_dashboard    = visionft.led_dashboard:main',
-            'usb_camera       = visionft.usb_camera:main',
+            # sensors
+            'coinft           = visionft.sensors.coinft:main',
+            'usb_camera       = visionft.sensors.usb_camera:main',
+            'wait_for_coinft  = visionft.sensors.wait_for_coinft:main',
+            # VR streaming
+            'tactile_stream   = visionft.streams.tactile_stream:main',
+            'scene_stream     = visionft.streams.scene_stream:main',
+            # visualization / dashboards
+            'led_dashboard    = visionft.viz.led_dashboard:main',
+            'grid_visualizer  = visionft.viz.grid_visualizer:main',
+            'wrench_plotter   = visionft.viz.wrench_plotter:main',
+            'plot_csv         = visionft.viz.plot_csv:main',
+            # tendon classification lives in the 'tendon_classifier' package
         ],
     },
 )
