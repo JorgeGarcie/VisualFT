@@ -38,6 +38,9 @@ __pycache__/
 .vscode/
 .idea/
 
+# Claude Code per-machine settings (never share)
+**/.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db
