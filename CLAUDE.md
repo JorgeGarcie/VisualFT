@@ -1,5 +1,7 @@
 # VisualFT
 
+> Entry point. Repo map, conventions, run commands. For module diagrams, integration protocols, and dependency rules see `ARCHITECTURE.md`.
+
 Robotic ultrasound phantom scanning system using a Flexiv Rizon4 robot arm with force-controlled
 contact, a CoinFT tactile sensor, and a vision-based tendon classifier. ROS2 is the control and
 data layer; one exclusive RDK bridge owns the robot connection.
@@ -19,29 +21,22 @@ VisualFT/
 │   │   │   ├── scan_controller.cpp — Automated phantom scanning state machine
 │   │   │   └── teleop.cpp          — VR hand-tracking teleop (Quest 3S → ZMQ)
 │   │   └── config/                 — YAML configs (robot, scan, teleop)
-│   ├── visionft/              — Python sensors, visualization, utilities
+│   ├── visionft/              — Python sensors, VR streaming, dashboards
 │   │   ├── visionft/
-│   │   │   ├── coinft.py               — CoinFT serial reader + ONNX calibration (360Hz)
-│   │   │   ├── grid_visualizer.py       — Live 2D workspace classification grid
-│   │   │   ├── wrench_plotter.py        — Live wrench plotting + CSV export
-│   │   │   └── plot_csv.py             — Offline CSV plotting
-│   │   ├── launch/
-│   │   │   ├── visionft.launch.py       — Sensor stack (camera + wrench + CoinFT)
-│   │   │   ├── scan.launch.py           — Launches C++ scan_controller + MCAP recording
-│   │   │   ├── teleop.launch.py         — Launches C++ teleop + ZMQ bridge + optional MCAP
-│   │   │   └── record.launch.py         — Manual MCAP recording
+│   │   │   ├── sensors/                 — coinft (300Hz), usb_camera, wait_for_coinft
+│   │   │   ├── streams/                 — scene_stream, tactile_stream (cameras → ZMQ for VR)
+│   │   │   └── viz/                     — led_dashboard, grid_visualizer, wrench_plotter, plot_csv
+│   │   ├── launch/                      — visionft, scan, teleop, record
 │   │   └── config/
 │   │       └── example_session.yaml     — Multi-scan session template
-│   ├── inference/             — Tendon classification (spatial image-only CNN)
-│   │   └── inference/
+│   ├── tendon_classifier/     — Tendon classification (spatial image-only CNN)
+│   │   └── tendon_classifier/
 │   │       ├── inference_node.py        — ROS2 node: /image_raw → /tendon_class
 │   │       ├── config.py               — Dataclass configs + YAML loader
 │   │       ├── models_v2.py            — Model architectures (ResNet/DINOv2/CLIP)
 │   │       ├── encoders.py             — Vision encoder wrappers
 │   │       └── attention.py            — Fusion + temporal aggregation modules
-│   ├── flexiv_ros2/           — Flexiv RDK bindings, examples, utility functions
-│   ├── gscam2/                — GStreamer camera bridge (H264 UDP → /image_raw)
-│   └── ptrmu/                 — ROS2 shared utilities
+│   └── flexiv_ros2/           — Flexiv RDK bindings, examples, utility functions
 ├── references/                — Reference code (leapft, VR teleop prototype)
 ├── classifier/                — TendonClassifier training/labeling pipeline
 ├── scripts/
@@ -49,30 +44,22 @@ VisualFT/
 └── data/                      — Recorded session data (.mcap, .csv)
 ```
 
-## Key Concepts
+## Quick References
 
-- **ArmCommander**: C++ class (in `arm_commander` package) that owns the single RDK connection. All robot executables in `robot_behaviors` (floating_scan, scan_controller, teleop) use ArmCommander -- no direct RDK calls elsewhere.
 - **Pose Formats**: RDK=[x,y,z,qw,qx,qy,qz], ROS2=[x,y,z] + quat(x,y,z,w), Elements=[mm,mm,mm,deg,deg,deg]
 - **Scan State Machine**: HOMING → ZEROING_FT → DESCENDING → SCANNING → RETURNING → DONE
-- **CoinFT**: Serial 360Hz → 1500-sample offset → ONNX calibration → bias-zeroed wrench
-- **Inference**: Camera frame → crop/resize 224px → ImageNet normalize → spatial CNN → class (0-3)
 
 ## Conventions
 
 - Python 3.10 (system), ROS2 Humble
-- All robot commands go through ROS2 topics, never direct RDK from non-bridge nodes
 - MCAP bags for data recording (not CSV loggers)
-- Quaternion order: always document which convention (w-first vs w-last)
-- Config: scan parameters via ROS2 params or YAML session files
+- Quaternion order: always document which convention (w-first vs w-last) at every boundary
+- YAML configs for scan/robot/teleop (loaded by C++ via yaml-cpp; not ROS2 params)
 
 ## Golden Principles
 
-1. **One fact, one place** — constants, config, shared logic have a single source of truth
-2. **Centralize, don't duplicate** — extract repeated patterns into shared utilities
-3. **Validate at boundaries** — assert shapes/types/ranges where data enters a module
-4. **Fail loud, not silent** — log warnings, don't swallow errors
-5. **Single RDK owner** — exactly one node owns the robot connection at any time
-6. **Record with MCAP** — all data recording via ROS2 bag, not custom loggers
+See `docs/design-docs/golden-principles.md`.
+GP1 one fact one place · GP2 centralize don't duplicate · GP3 validate at boundaries · GP4 fail loud not silent · GP5 record with MCAP
 
 ## How to Run
 
@@ -94,7 +81,7 @@ ros2 run robot_behaviors teleop <teleop_config> <robot_config>
 ros2 launch visionft teleop.launch.py teleop_config:=/path/to/teleop.yaml robot_config:=/path/to/robot.yaml record:=true
 
 # Inference
-ros2 run inference tendon_inference
+ros2 run tendon_classifier tendon_inference
 ```
 
 ## Deeper Context
@@ -102,10 +89,8 @@ ros2 run inference tendon_inference
 | Topic | File |
 |-------|------|
 | Architecture & data flow | `ARCHITECTURE.md` |
-| Design decisions | `docs/design-docs/design.md` |
-| Golden principles (detailed) | `docs/design-docs/golden-principles.md` |
-| Lessons learned | `docs/design-docs/lessons-learned.md` |
-| ExecPlan template | `docs/exec-plans/plans.md` |
-| Tech debt tracker | `docs/exec-plans/tech-debt-tracker.md` |
+| Golden principles | `docs/golden-principles.md` |
+| Lessons learned & architecture decisions | `docs/lessons-learned.md` |
 | Getting started | `docs/getting-started.md` |
-| Quality scores | `docs/quality-score.md` |
+| VR teleop setup | `docs/getting-started-teleop.md` |
+| VR teleop handoff (ports, network, gotchas) | `docs/vr-teleop-handoff.md` |

@@ -42,24 +42,17 @@ ros2 launch visionft scan.launch.py session_config:=/path/to/session.yaml
 
 Auto-records MCAP bag per scan. Exits when all scans complete.
 
-### 3. Bridge + Manual Control
+### 3. Tendon Inference
 
 ```bash
-ros2 run visionft rdk_cartesian_bridge
-# Then publish PoseStamped to /rdk/cartesian_target from another node
+ros2 run tendon_classifier tendon_inference --ros-args -p model_dir:=/path/to/model
 ```
 
-### 4. Tendon Inference
-
-```bash
-ros2 run inference tendon_inference --ros-args -p model_dir:=/path/to/model
-```
-
-### 5. VR Teleop
+### 4. VR Teleop
 
 See [getting-started-teleop.md](getting-started-teleop.md) for full setup instructions.
 
-### 6. LED + Vision Dashboard
+### 5. LED + Vision Dashboard
 
 PyQt5 dashboard for LED control (Arduino NeoPixels), live CoinFT force plots, and 5x2 camera vision analytics. Requires the sensor stack running.
 
@@ -75,7 +68,7 @@ Subscribes to `/image_raw` and `/coinft/wrench` from ROS2. LED panel runs in sim
 
 ## Important Notes
 
-- **Never run bridge and scan_node simultaneously** — both need exclusive RDK access
-- **Use `python3` not `python`** — flexivrdk is on system Python 3.10, not conda
+- **Only one robot_behaviors executable at a time** — floating_scan, scan_controller, and teleop each open the single RDK connection
 - **Zero F/T sensor after homing** — prevents force bias drift
 - **E-stop**: If triggered, must be physically released before robot can re-enable
+- **RT scheduler needs sudo** — teleop uses `RT_JOINT_TORQUE`; run with `sudo` or `setcap cap_sys_nice+ep` on the binary

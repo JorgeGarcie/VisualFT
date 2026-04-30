@@ -65,3 +65,33 @@ Pipeline for new golden principles. Status: observation → candidate → promot
 - **Root cause**: SCHED_FIFO requires root or capability grants
 - **Lesson**: Fix with `setcap cap_sys_nice+ep` on the executable or configure `/etc/security/limits.conf`. Don't run the whole node as root.
 - **Status**: observation
+
+---
+
+## Architecture Decisions
+
+Non-obvious design choices from the ArmCommander migration. Kept here so the *why* is visible without spelunking through commits.
+
+### Safety lives inside ArmCommander, not as a separate wrapper
+Workspace bounds, force/fault watch, and motion-limit enforcement are part of ArmCommander itself. Cannot be bypassed by callers; stays at the robot boundary. A "safe wrapper" class would be skippable.
+
+### Heartbeat timeout applies only to streaming Cartesian control
+Blocking primitives (Home, MoveL, ZeroFTSensor, Contact) legitimately take seconds. A global "command every N seconds" rule would false-stop these. Heartbeat is scoped to NRT_CARTESIAN_MOTION_FORCE mode only.
+
+### Force/fault watchdog is intentionally redundant with the SDK
+Flexiv already handles the low-level stop path. Our watchdog still logs and surfaces fault/force events — observability on top, not a replacement.
+
+### Configure SetMaxContactWrench() proactively in streaming mode
+RDK exposes this as motion-controller regulation, not just post-hoc observation. Set it before contact issues appear, not after.
+
+### CoinFT readiness lives outside ArmCommander
+ArmCommander is the robot driver boundary. Sensor initialization and freshness gating belong to the application/launch layer (e.g. `wait_for_coinft`), not the robot driver.
+
+### No differential dt-based velocity checker
+Velocity computed from consecutive setpoint deltas is a noisy proxy. RDK's own `max_linear_vel` / `max_angular_vel` motion limits are the source of truth.
+
+### Config via yaml-cpp, not ROS2 params
+ArmCommander is a plain C++ class, not a ROS2 node. yaml-cpp keeps it standalone and unit-testable without a ROS2 context.
+
+### Wrench frame inconsistency (TCP vs world) — open
+`scan_controller` publishes wrench in world frame; the legacy Python path used TCP frame. When a unified C++ ROS2 publisher layer is built, expose both on separate topics (`/rdk/wrench_tcp`, `/rdk/wrench_world`) with `frame_id` set in the header.

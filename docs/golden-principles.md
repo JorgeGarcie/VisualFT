@@ -30,14 +30,18 @@ Log warnings for unexpected states. Never swallow exceptions. If a sensor
 disconnects or RDK faults, the node should report it clearly, not silently
 produce zeros.
 
-## GP5: Single RDK owner
-
-Exactly one node owns the Flexiv RDK connection at any time. All other
-nodes command the robot through ROS2 topics. This is a hardware constraint
-(single connection limit) elevated to a design principle.
-
-## GP6: Record with MCAP
+## GP5: Record with MCAP
 
 All data recording uses ROS2 MCAP bags, not custom CSV/video loggers.
 MCAP captures all topics at full rate with zero application overhead and
 enables per-pass post-processing.
+
+---
+
+## Demoted: Single RDK owner
+
+Previously GP5. The Flexiv SDK only allows one client connection — exactly
+one node owning the RDK is enforced both by the SDK itself and by the
+`arm_commander` library design. This is an architectural fact, not a
+guiding principle, so it now lives in `ARCHITECTURE.md` under Dependency
+Rules rather than as a project principle.
