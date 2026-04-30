@@ -1,10 +1,7 @@
 # Golden Principles
 
-Timeless philosophies for the VisualFT codebase. Specific violations go in
-`docs/exec-plans/tech-debt-tracker.md`, not here.
-
-New candidates go through `docs/design-docs/lessons-learned.md` first.
-Promotion criteria: validated across 3+ tasks.
+Timeless philosophies for the VisualFT codebase. New candidates go through
+`docs/lessons-learned.md` first. Promotion criteria: validated across 3+ tasks.
 
 ---
 

@@ -1,5 +1,7 @@
 # Architecture
 
+> Technical reference for how modules connect. Diagrams, integration protocols, dependency rules. For repo map, conventions, and run commands see `CLAUDE.md`.
+
 ## Module Dependency Graph
 
 ```
@@ -32,9 +34,9 @@
 ## Data Flow
 
 ```
- ┌──────────┐   H264/UDP    ┌────────┐  /image_raw   ┌──────────────┐  /tendon_class
- │ RPi Cam  │ ──────────► │ gscam2 │ ──────────► │inference_node│ ──────────►
- └──────────┘              └────────┘              └──────────────┘
+ ┌──────────┐    V4L2       ┌─────────────┐  /image_raw   ┌──────────────┐  /tendon_class
+ │ USB Cam  │ ──────────► │ usb_camera  │ ──────────► │inference_node│ ──────────►
+ └──────────┘              └─────────────┘              └──────────────┘
 
  ┌──────────┐   Serial 1Mbps ┌─────────┐  /coinft/wrench
  │ CoinFT   │ ────────────► │coinft.py│ ──────────────►
@@ -55,18 +57,12 @@
                              └─────────────┘
 ```
 
-## Language Boundary
-
-- **C++**: All robot control (`arm_commander` library + `robot_behaviors` executables)
-- **Python**: Sensors and ML only (CoinFT, gscam2, inference, grid_visualizer, wrench_plotter)
-- **Bridge**: ROS2 topics connect C++ and Python worlds
-
 ## Integration Points
 
 | Boundary | Protocol | Rate | Format |
 |----------|----------|------|--------|
-| RPi Camera → gscam2 | UDP H264 | ~30 Hz | GStreamer pipeline |
-| CoinFT → coinft.py | Serial | 360 Hz | Raw bytes → ONNX calibration |
+| USB Camera → usb_camera | V4L2 (/dev/video2) | ~30 Hz | OpenCV → sensor_msgs/Image |
+| CoinFT → coinft.py | Serial | 300 Hz | Raw bytes → ONNX calibration |
 | Flexiv RDK ↔ ArmCommander | C++ API (Ethernet) | 1kHz RT / 50Hz NRT | [x,y,z,qw,qx,qy,qz] + [fx,fy,fz,tx,ty,tz] |
 | ROS2 inter-node | DDS | varies | PoseStamped, WrenchStamped, Image, String, Int32 |
 | VR Teleop → teleop | ZMQ (WiFi) | ~60 Hz | Hand poses via PUB/SUB |
@@ -111,9 +107,8 @@ Quest 3S → vr_server.py (PUB raw bytes, ports 8089/8102)
 
 ## Dependency Rules
 
-- **arm_commander** package is the single RDK owner — no direct RDK calls outside this library
-- **robot_behaviors** package contains C++ executables (floating_scan, scan_controller, teleop) that link against arm_commander
-- **inference** depends only on `/image_raw` (no force data)
-- **coinft** is standalone — no dependency on robot state
-- **gscam2** is standalone — no dependency on robot state
-- No Python node imports `flexivrdk` — all robot control is C++
+- **C++ for robot control, Python for sensors/ML.** ROS2 topics bridge the two worlds.
+- **arm_commander owns the RDK connection.** No `flexivrdk` imports outside this library — all robot commands flow through it. The Flexiv SDK only allows one client connection, so this is enforced both architecturally and by the SDK itself.
+- **robot_behaviors** executables (floating_scan, scan_controller, teleop) link against arm_commander.
+- **tendon_classifier** depends only on `/image_raw` — no force data.
+- **coinft** and **usb_camera** are standalone — no dependency on robot state.
