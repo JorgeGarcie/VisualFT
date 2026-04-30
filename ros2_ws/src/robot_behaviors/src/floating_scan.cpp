@@ -66,6 +66,7 @@ int main(int argc, char* argv[])
         commander.zero_ft();
 
         spdlog::info("Press Ctrl+C to stop");
+        // TODO: tune damping on hardware (J1-J3 shoulder/elbow, J4-J7 wrist)
         commander.float_joints({10.0, 10.0, 8.0, 4.0, 4.0, 4.0, 4.0});
 
         // float_cartesian blocks until stop requested

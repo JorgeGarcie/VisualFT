@@ -4,6 +4,13 @@
  *
  * All RDK access is mutex-protected. Mode switching is internal.
  * Callers use high-level methods: home(), zero_ft(), contact(), etc.
+ *
+ * Safety: workspace bounds checked inline on every command; force limits
+ * enforced by RDK SetMaxContactWrench; faults handled by RDK itself.
+ *
+ * Optional future addition: background observability thread for force/fault
+ * logging and streaming-stall detection (stop the robot if the control loop
+ * hangs while streaming). Not a safety gap — the layers above cover threats.
  */
 
 #ifndef ARM_COMMANDER_ARM_COMMANDER_HPP_

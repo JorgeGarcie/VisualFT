@@ -154,6 +154,8 @@ void ArmCommander::move_to(const std::array<double, 7>& pose, double velocity)
 
 // ── Tool management ────────────────────────────────────────────────────────
 
+// TODO: register CoinFT as a tool (mass / CoM / inertia in robot.yaml) so gravity
+// compensation works in floating mode and Cartesian impedance control.
 void ArmCommander::set_tool(const std::string& name, double mass,
     const std::array<double, 3>& com, const std::array<double, 6>& inertia,
     const std::array<double, 7>& tcp_location)
