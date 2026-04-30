@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'inference'
+package_name = 'tendon_classifier'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'tendon_inference = inference.inference_node:main',
+            'tendon_inference = tendon_classifier.inference_node:main',
         ],
     },
 )

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>inference</name>
+  <name>tendon_classifier</name>
   <version>0.0.0</version>
   <description>Tendon classification inference (image-only spatial model)</description>
   <maintainer email="georgealex29@gmail.com">li2053</maintainer>

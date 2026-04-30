@@ -50,7 +50,7 @@ class TendonInferenceNode(Node):
         super().__init__('tendon_inference')
 
         # Parameters
-        self.declare_parameter('model_dir', os.path.expanduser('~/model'))
+        self.declare_parameter('model_dir', os.path.expanduser('~/VisualFT/data/models'))
         self.declare_parameter('config_file', 'spatial_image_only.yaml')
         self.declare_parameter('use_cuda', True)
 
@@ -69,14 +69,14 @@ class TendonInferenceNode(Node):
         if os.path.isabs(config_file):
             config_path = config_file
         else:
-            share_dir = get_package_share_directory('inference')
+            share_dir = get_package_share_directory('tendon_classifier')
             config_path = os.path.join(share_dir, 'config', config_file)
 
         config = load_config(config_path)
         model = get_model_v2(config.model)
 
-        # Load weights from model_dir
-        weights_name = 'best_image_only.pth'
+        # Load weights from model_dir (filename matches the config_file stem)
+        weights_name = os.path.splitext(config_file)[0] + '.pth'
         weights_path = os.path.join(model_dir, weights_name)
         ckpt = torch.load(weights_path, map_location=self.device, weights_only=True)
         model.load_state_dict(ckpt['model_state_dict'])
