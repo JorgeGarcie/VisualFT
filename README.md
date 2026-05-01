@@ -2,8 +2,6 @@
 
 Robotic ultrasound phantom scanning with force-controlled contact, tactile sensing, and VR teleoperation on a Flexiv Rizon4.
 
-<!-- TODO: add demo image / GIF here -->
-
 ## What it does
 
 - **Automated phantom scans** 
