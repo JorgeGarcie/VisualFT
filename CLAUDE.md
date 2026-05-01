@@ -25,7 +25,7 @@ VisualFT/
 │   │   ├── visionft/
 │   │   │   ├── sensors/                 — coinft (300Hz), usb_camera, wait_for_coinft
 │   │   │   ├── streams/                 — scene_stream, tactile_stream (cameras → ZMQ for VR)
-│   │   │   └── viz/                     — led_dashboard, grid_visualizer, wrench_plotter, plot_csv
+│   │   │   └── viz/                     — led_dashboard, grid_visualizer, plot_csv
 │   │   ├── launch/                      — visionft, scan, teleop, record
 │   │   └── config/
 │   │       └── example_session.yaml     — Multi-scan session template

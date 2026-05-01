@@ -48,8 +48,6 @@ Open follow-ups across the project. Inline `// TODO:` comments in code remain th
 
 - **`visionft/sensors/usb_camera.py:27-28`** — If `cv2.VideoCapture` fails to open, the node logs an error and `return`s from `__init__`, leaving the node in a half-initialized state with no publisher. The timer is never created, so no frames are published, but the node starts and `rclpy.spin` runs indefinitely without error. Should raise an exception so the launch system sees the failure. **Severity: med**
 
-- **`visionft/viz/wrench_plotter.py:66-68`** — CSV file is opened unconditionally in `__init__` with no error handling. If the file path is not writable the exception propagates unlogged and kills the node. Wrap in `try/except` and log clearly. **Severity: low**
-
 ### GP4: Fail loud, not silent
 
 - **`visionft/sensors/coinft.py:94`** — Watchdog timer is disabled: `# self.create_timer(0.2, self._watchdog_check)`. The `_watchdog_check` method and `WATCHDOG_TIMEOUT_S` constant exist and work, but are never scheduled. A serial stall or sensor freeze will not produce an ERROR state without the stale-data check hitting the `STALE_IDENTICAL_LIMIT` (which is already tracked as untested). Re-enable the watchdog timer. **Severity: high**
@@ -59,8 +57,6 @@ Open follow-ups across the project. Inline `// TODO:` comments in code remain th
 ### GP5: Record with MCAP
 
 - **`visionft/viz/led_dashboard.py:257-264` (VideoWriter) and `visionft/viz/led_dashboard.py:577-609` (csv.writer)** — The dashboard records video as XVID AVI files and force data as CSV files under `recordings/` in the current working directory, bypassing MCAP entirely. This is a debug/capture tool for Teo's original workflow and the files land in an untracked CWD path. If these recordings are ever used as ground truth, they will not be replayable with `ros2 bag play`. Either remove the recording feature (the dashboard is a viz tool, not a recorder) or gate it with a clear "not for data collection" warning. **Severity: med**
-
-- **`visionft/viz/wrench_plotter.py:64-71` and `127-189`** — `WrenchPlotter` always opens a CSV file at startup and writes every received wrench and TCP pose sample to it in real time. This is the primary logging mechanism, not a side feature — the startup log says "Writing data in real-time to: ...". Use `ros2 bag record` instead; the `record.launch.py` already covers this use case. **Severity: high**
 
 ### Documentation gap (not a GP violation but should be fixed)
 
@@ -72,6 +68,5 @@ Decision: **MCAP is the only recording. CSV and MP4 are post-hoc exports via `sc
 
 Action items below need a working robot session to verify nothing downstream breaks. Do them when back on the lab machine.
 
-- **Delete `visionft/viz/wrench_plotter.py`** entirely. Superseded by `led_dashboard` (UI) + `record.launch.py` (data). Removes the GP5 high-severity finding above.
 - **Strip recording code from `led_dashboard.py`** — keep the UI (LED control, force plots, vision analytics) but remove the XVID `VideoWriter` (lines 257-264) and the CSV `csv.writer` (lines 577-609). Dashboard becomes pure viz; recording goes through `record.launch.py`.
 - **Lower the bar for downstream users (PhD analysis)** — wrap `scripts/extract_mcap.py` so the typical case is one command. Options: (a) `scripts/bag_to_csv.sh <bag.mcap>` wrapper with sane defaults, (b) auto-extract on session end via a launch hook in `record.launch.py`, (c) one-page README in `data/`. Pick one; (a) is cheapest.

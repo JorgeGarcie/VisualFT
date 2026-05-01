@@ -39,7 +39,6 @@ setup(
             # visualization / dashboards
             'led_dashboard    = visionft.viz.led_dashboard:main',
             'grid_visualizer  = visionft.viz.grid_visualizer:main',
-            'wrench_plotter   = visionft.viz.wrench_plotter:main',
             'plot_csv         = visionft.viz.plot_csv:main',
             # tendon classification lives in the 'tendon_classifier' package
         ],
