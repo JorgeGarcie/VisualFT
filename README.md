@@ -1,12 +1,13 @@
-# VisualFT
+# VisionFT-TRACE
 
-Robotic ultrasound phantom scanning with force-controlled contact, tactile sensing, and VR teleoperation on a Flexiv Rizon4.
+**Tactile Robot Arm Contact Experiments** — a research platform for contact-rich robotics on a Flexiv Rizon4. VisionFT is the sensing stack (vision + force/torque + tactile); TRACE is the experimentation layer built on top of it.
 
 ## What it does
 
-- **Automated phantom scans** 
-- **VR hand-tracking teleop** — Quest 3S headset drives the robot via ZMQ keypoints, with live tactile and scene video streamed back to the headset.
-- **Tendon classification** — image-only CNN runs on the scanning camera and publishes class labels in real time.
+- **VR hand-tracking teleoperation** — Quest 3S headset drives the robot via ZMQ keypoints, with live tactile and scene video streamed back to the headset.
+- **Admittance / force-controlled contact** — constant-force pressing, hand-guided floating, and Cartesian motion-force control.
+- **Automated scanning** — state-machine-driven phantom scans with auto-recording.
+- **Tendon classification** — runs on the scanning camera and publishes class labels in real time.
 
 ## Hardware
 
