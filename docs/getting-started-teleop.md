@@ -89,6 +89,23 @@ If you don't want to install packages for root, run streams and vr_server separa
 - **`No module named 'zmq'` under sudo**: run streams as your user in separate terminals (don't use the launch file with sudo)
 - **VR DROPOUT warning**: Quest APK is not sending data — check that vr_server is running and the Quest app is active
 
+## Headset configuration
+
+Each Quest's APK has its scene-camera port hardcoded:
+
+| Headset | Scene camera port |
+|---------|-------------------|
+| Lukas's Quest | 10505 (default) |
+| VISIONFT Quest | 10005 |
+
+If using the VISIONFT Quest, run `scene_stream` with `--port 10005`:
+
+```bash
+ros2 run visionft scene_stream --port 10005
+```
+
+Tactile stream port (15001) is the same for both headsets.
+
 ## Config
 
 Teleop parameters are in `ros2_ws/src/robot_behaviors/config/teleop.yaml`:
