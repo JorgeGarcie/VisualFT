@@ -1,15 +1,16 @@
-# VisualFT
+# VisionFT-TRACE
 
 > Entry point. Repo map, conventions, run commands. For module diagrams, integration protocols, and dependency rules see `docs/architecture.md`.
 
-Robotic ultrasound phantom scanning system using a Flexiv Rizon4 robot arm with force-controlled
-contact, a CoinFT tactile sensor, and a vision-based tendon classifier. ROS2 is the control and
-data layer; one exclusive RDK bridge owns the robot connection.
+**Tactile Robot Arm Contact Experiments** — research platform for contact-rich robotics on a
+Flexiv Rizon4. Covers VR teleoperation, admittance / force-controlled contact, automated
+scanning, and tactile sensing. ROS2 is the control and data layer; one exclusive RDK bridge
+owns the robot connection.
 
 ## Repository Map
 
 ```
-VisualFT/
+visionft-trace/
 ├── ros2_ws/src/
 │   ├── arm_commander/          — C++ ArmCommander library (reusable robot interface)
 │   │   ├── include/arm_commander/  — ArmCommander class, config (safety logic lives in arm_commander.cpp)
@@ -24,13 +25,13 @@ VisualFT/
 │   │   └── config/                 — YAML configs (robot, scan, teleop)
 │   ├── visionft/              — Python sensors, VR streaming, dashboards
 │   │   ├── visionft/
-│   │   │   ├── sensors/                 — coinft (300Hz), usb_camera, wait_for_coinft
+│   │   │   ├── sensors/                 — coinft, usb_camera, wait_for_coinft
 │   │   │   ├── streams/                 — scene_stream, tactile_stream (cameras → ZMQ for VR)
 │   │   │   └── viz/                     — led_dashboard, grid_visualizer, plot_csv
 │   │   ├── launch/                      — visionft, scan, teleop, record
 │   │   └── config/
 │   │       └── example_session.yaml     — Multi-scan session template
-│   ├── tendon_classifier/     — Tendon classification (spatial image-only CNN)
+│   ├── tendon_classifier/     — Tendon classification CNN
 │   │   └── tendon_classifier/
 │   │       ├── inference_node.py        — ROS2 node: /image_raw → /tendon_class
 │   │       ├── config.py               — Dataclass configs + YAML loader
