@@ -48,6 +48,8 @@ Auto-records MCAP bag per scan. Exits when all scans complete.
 ros2 run tendon_classifier tendon_inference --ros-args -p model_dir:=/path/to/model
 ```
 
+Model weights: place `spatial_combined.pth` or `spatial_image_only.pth` in `~/VisualFT/data/models/`.
+
 ### 4. VR Teleop
 
 See [getting-started-teleop.md](getting-started-teleop.md) for full setup instructions.
