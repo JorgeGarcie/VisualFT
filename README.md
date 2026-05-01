@@ -1,10 +1,12 @@
 # VisionFT-TRACE
 
-**Tactile Robot Arm Contact Experiments** — a research platform for contact-rich robotics on a Flexiv Rizon4. VisionFT is the sensing stack (vision + force/torque + tactile); TRACE is the experimentation layer built on top of it.
+**Tactile Robot Arm Contact Experiments** 
+BDML research platform for contact-rich robotics experiments.
+VisionFT is the sensing stack; TRACE is the experimentation layer built on top of it.
 
 ## What it does
 
-- **VR hand-tracking teleoperation** — Quest 3S headset drives the robot via ZMQ keypoints, with live tactile and scene video streamed back to the headset.
+- **VR hand-tracking teleoperation** — Quest 3S headset drives the robot with live tactile and scene video streamed back to the headset.
 - **Admittance / force-controlled contact** — constant-force pressing, hand-guided floating, and Cartesian motion-force control.
 - **Automated scanning** — state-machine-driven phantom scans with auto-recording.
 - **Tendon classification** — runs on the scanning camera and publishes class labels in real time.
