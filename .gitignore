@@ -60,6 +60,3 @@ Thumbs.db
 *.gif
 *.mp4
 *.avi
-
-# Local-only handoff doc (kept out of git on purpose)
-docs/vr-teleop-handoff.md
