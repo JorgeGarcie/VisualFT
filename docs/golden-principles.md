@@ -40,5 +40,5 @@ enables per-pass post-processing.
 Previously GP5. The Flexiv SDK only allows one client connection — exactly
 one node owning the RDK is enforced both by the SDK itself and by the
 `arm_commander` library design. This is an architectural fact, not a
-guiding principle, so it now lives in `ARCHITECTURE.md` under Dependency
+guiding principle, so it now lives in `docs/architecture.md` under Dependency
 Rules rather than as a project principle.

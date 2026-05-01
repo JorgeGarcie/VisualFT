@@ -1,6 +1,6 @@
 # VisualFT
 
-> Entry point. Repo map, conventions, run commands. For module diagrams, integration protocols, and dependency rules see `ARCHITECTURE.md`.
+> Entry point. Repo map, conventions, run commands. For module diagrams, integration protocols, and dependency rules see `docs/architecture.md`.
 
 Robotic ultrasound phantom scanning system using a Flexiv Rizon4 robot arm with force-controlled
 contact, a CoinFT tactile sensor, and a vision-based tendon classifier. ROS2 is the control and
@@ -12,7 +12,7 @@ data layer; one exclusive RDK bridge owns the robot connection.
 VisualFT/
 ├── ros2_ws/src/
 │   ├── arm_commander/          — C++ ArmCommander library (reusable robot interface)
-│   │   ├── include/arm_commander/  — ArmCommander class, config, safety
+│   │   ├── include/arm_commander/  — ArmCommander class, config (safety logic lives in arm_commander.cpp)
 │   │   └── src/                    — Library implementation
 │   ├── robot_behaviors/        — C++ robot behavior executables
 │   │   ├── include/robot_behaviors/ — App-specific configs (scan, teleop)
@@ -58,7 +58,7 @@ VisualFT/
 
 ## Golden Principles
 
-See `docs/design-docs/golden-principles.md`.
+See `docs/golden-principles.md`.
 GP1 one fact one place · GP2 centralize don't duplicate · GP3 validate at boundaries · GP4 fail loud not silent · GP5 record with MCAP
 
 ## How to Run
@@ -88,9 +88,8 @@ ros2 run tendon_classifier tendon_inference
 
 | Topic | File |
 |-------|------|
-| Architecture & data flow | `ARCHITECTURE.md` |
+| Architecture & data flow | `docs/architecture.md` |
 | Golden principles | `docs/golden-principles.md` |
 | Lessons learned & architecture decisions | `docs/lessons-learned.md` |
 | Getting started | `docs/getting-started.md` |
 | VR teleop setup | `docs/getting-started-teleop.md` |
-| VR teleop handoff (ports, network, gotchas) | `docs/vr-teleop-handoff.md` |

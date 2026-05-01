@@ -2,9 +2,8 @@
  * @file scan_controller.cpp
  * @brief Automated phantom scanning state machine using ArmCommander.
  *
- * Port of scan_node.py (Python) to C++. Uses ArmCommander for ALL robot
- * interaction -- no direct RDK calls, no quaternion reordering, no manual
- * mode switching.
+ * Uses ArmCommander for ALL robot interaction -- no direct RDK calls, no
+ * quaternion reordering, no manual mode switching.
  *
  * State machine: HOMING -> ZEROING_FT -> DESCENDING -> SCANNING -> RETURNING -> DONE
  *

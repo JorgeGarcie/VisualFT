@@ -10,7 +10,7 @@ Pipeline for new golden principles. Status: observation → candidate → promot
 - **Context**: Teleop mode — robot crept forward on engage
 - **Root cause**: F/T sensor had accumulated bias; `ZeroFTSensor` primitive fixes it
 - **Lesson**: Always zero F/T sensor after homing, before any force-dependent operation
-- **Status**: observation (validated in teleop; scan_node already does this)
+- **Status**: observation (validated in teleop; scan_controller already does this)
 
 ### Quaternion convention mismatches cause subtle bugs
 - **Context**: robot_publisher.py treated `[qw,qx,qy]` as Euler angles

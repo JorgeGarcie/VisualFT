@@ -1,4 +1,4 @@
-# Example session config for scan_node
+# Example session config for scan_controller
 #
 # Usage:
 #   ros2 launch visionft scan.launch.py session_config:=/home/li2053/VisualFT/ros2_ws/src/visionft/config/example_session.yaml

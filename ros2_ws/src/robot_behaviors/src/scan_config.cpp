@@ -3,7 +3,6 @@
  * @brief Load ScanSessionConfig from YAML.
  *
  * Merge order: hardcoded defaults < session "defaults" < per-scan overrides.
- * This mirrors the Python scan_node's _get_scan_params() logic.
  */
 
 #include "robot_behaviors/scan_config.hpp"

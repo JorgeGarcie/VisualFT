@@ -15,6 +15,7 @@ Open follow-ups across the project. Inline `// TODO:` comments in code remain th
 
 - **Restore force-tier colors in tactile_stream** — currently overrides Fz overlay text to plain white; original tiers were green <5 N / yellow <15 N / red ≥15 N.
 - **Widen teleop force threshold** — `teleop.yaml` uses 25 N. leapft uses 40 N pause / 80 N estop. Decide and align after a few teleop sessions.
+- **Revisit teleop workspace bounds** — `robot.yaml` `safety.workspace` is intentionally conservative (clips reachable area). Once early sessions confirm a safe envelope, widen the box so operators aren't fighting the bounds. Documented under "Known limitations" in `docs/getting-started-teleop.md`.
 
 ## Per-package metadata
 

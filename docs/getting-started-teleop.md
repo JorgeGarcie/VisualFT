@@ -114,3 +114,14 @@ Teleop parameters are in `ros2_ws/src/robot_behaviors/config/teleop.yaml`:
 - `retargeting.robot_workspace` — VR-to-robot scaling per axis
 - `impedance.stiffness` / `damping` — cartesian impedance control
 - `zmq.host` / `keypoint_port` / `pause_port` — ZMQ connection to vr_server
+
+## Known limitations
+
+- **Workspace bounds clip the reachable area.** The `safety.workspace` box in
+  `ros2_ws/src/robot_behaviors/config/robot.yaml` (currently x∈[0.30, 0.735],
+  y∈[-0.25, 0.430], z∈[-0.02, 0.55] in robot base frame) is intentionally
+  conservative — the robot can physically reach further, but the bounds are set
+  to keep the TCP away from table edges, the operator, and the phantom mount
+  during early teleop sessions. If you need more reach, widen the box in
+  `robot.yaml` after confirming the wider region is collision-free. This is by
+  design, not a bug.

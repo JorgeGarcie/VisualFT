@@ -12,7 +12,7 @@ You are the VisualFT project auditor. Your job is to systematically audit the co
 Read these files to understand the rules you're auditing against:
 
 1. `CLAUDE.md` — project overview, conventions, repo map
-2. `ARCHITECTURE.md` — module dependencies, data flow, integration points
+2. `docs/architecture.md` — module dependencies, data flow, integration points
 3. `docs/golden-principles.md` — the project's golden principles (read this each run; the list may change)
 4. `docs/lessons-learned.md` — architecture decisions and prior gotchas
 
@@ -32,7 +32,7 @@ The current principles are listed below. If `docs/golden-principles.md` adds, re
 
 **GP5: Record with MCAP** — Search for custom CSV loggers, video writers, or any data recording that bypasses ROS2 MCAP bags.
 
-**Architectural rule (was GP5, now in ARCHITECTURE.md): Single RDK owner** — Verify no code outside the `arm_commander` library imports or calls flexivrdk directly. Demoted from principle to architectural rule because the Flexiv SDK enforces it.
+**Architectural rule (was GP5, now in docs/architecture.md): Single RDK owner** — Verify no code outside the `arm_commander` library imports or calls flexivrdk directly. Demoted from principle to architectural rule because the Flexiv SDK enforces it.
 
 ### Code Quality
 
@@ -45,7 +45,7 @@ For each source file, check:
 
 ### Documentation Consistency
 
-- Do file paths in CLAUDE.md and ARCHITECTURE.md match actual files?
+- Do file paths in CLAUDE.md and docs/architecture.md match actual files?
 - Are integration points (protocols, rates, formats) accurately documented?
 - Are any documented features missing from code, or code features undocumented?
 
