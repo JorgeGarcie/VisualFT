@@ -15,13 +15,13 @@
                     │  all primitives  │
                     └──────┬───────────┘
                            │ used by
-              ┌────────────┼────────────┐
-              │            │            │
-    ┌─────────▼──────┐ ┌──▼──────────┐ ┌▼────────────┐
-    │ floating_scan  │ │scan_controller│ │   teleop    │
-    │ (hand-guided   │ │(auto scan    │ │(VR hand     │
-    │  joint float)  │ │ state machine│ │ tracking)   │
-    └────────────────┘ │ + MCAP rec)  │ └─────────────┘
+         ┌────────────┬─────────────┬─────────────┐
+         │            │             │             │
+   ┌─────▼──────┐ ┌──▼──────────┐ ┌▼──────────┐ ┌▼─────────┐
+   │floating_scan│ │scan_controller│ │  teleop   │ │  massage │
+   │(hand-guided │ │(auto scan    │ │(VR hand   │ │(const Z  │
+   │ joint float)│ │ state machine│ │ tracking) │ │ force)   │
+   └─────────────┘ │ + MCAP rec)  │ └───────────┘ └──────────┘
            └──── robot_behaviors package ─────┘
                        └──────┬───────┘
                               │ publishes
@@ -49,8 +49,8 @@
                                       │ used by
                     ┌─────────────────┼──────────────────┐
                     │                 │                   │
-              floating_scan    scan_controller        teleop
-              (manual)         (automated)      (VR, Quest 3S → ZMQ)
+         floating_scan    scan_controller       teleop          massage
+         (manual)         (automated)     (VR, Quest 3S→ZMQ)  (const Z force)
 
                              ┌─────────────┐
                     All ──► │  MCAP Bag    │  (ros2 bag record or scan_controller)
@@ -109,6 +109,6 @@ Quest 3S → vr_server.py (PUB raw bytes, ports 8089/8102)
 
 - **C++ for robot control, Python for sensors/ML.** ROS2 topics bridge the two worlds.
 - **arm_commander owns the RDK connection.** No `flexivrdk` imports outside this library — all robot commands flow through it. The Flexiv SDK only allows one client connection, so this is enforced both architecturally and by the SDK itself.
-- **robot_behaviors** executables (floating_scan, scan_controller, teleop) link against arm_commander.
+- **robot_behaviors** executables (floating_scan, scan_controller, teleop, massage) link against arm_commander.
 - **tendon_classifier** depends only on `/image_raw` — no force data.
 - **coinft** and **usb_camera** are standalone — no dependency on robot state.

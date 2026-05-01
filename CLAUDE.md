@@ -19,7 +19,8 @@ VisualFT/
 │   │   ├── src/
 │   │   │   ├── floating_scan.cpp   — Hand-guided joint floating
 │   │   │   ├── scan_controller.cpp — Automated phantom scanning state machine
-│   │   │   └── teleop.cpp          — VR hand-tracking teleop (Quest 3S → ZMQ)
+│   │   │   ├── teleop.cpp          — VR hand-tracking teleop (Quest 3S → ZMQ)
+│   │   │   └── massage.cpp         — Constant-force Z press (force ctrl Z, motion ctrl XY)
 │   │   └── config/                 — YAML configs (robot, scan, teleop)
 │   ├── visionft/              — Python sensors, VR streaming, dashboards
 │   │   ├── visionft/
